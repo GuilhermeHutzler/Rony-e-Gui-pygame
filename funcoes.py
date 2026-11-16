@@ -1,5 +1,19 @@
+# ============================================================
+#  JOGO DA MEMÓRIA - pygame
+#
+#  Para jogar: python memoria_espacial.py
+#  Não precisa de nenhum outro arquivo: os desenhos e os sons
+#  são criados aqui mesmo no código.
+#
+#  O jogo tem 2 telas, e cada tela é uma FUNÇÃO com o seu próprio loop:
+#    tela_menu()  -> digita o nome, escolhe o nível, vê o ranking
+#    tela_jogo()  -> a partida
+#  Cada função devolve qual é a próxima tela ("menu", "jogo" ou "sair").
+# ============================================================
+
 import os
 import random
+from array import array
 import pygame
 
 # ------------------------- CONFIGURAÇÕES -------------------------
@@ -10,20 +24,18 @@ ESPACO = 12                 # espaço entre as cartas (em pixels)
 TEMPO_ERRO = 800            # quanto tempo (ms) um par errado fica aparecendo
 TAM_RANKING = 5             # quantas pessoas aparecem no ranking de cada nível
 TAM_NOME = 12               # máximo de letras do nome
-
-# Pastas: o caminho é montado a partir da pasta onde este arquivo está
-PASTA = os.path.dirname(os.path.abspath(__file__))
-PASTA_IMG = os.path.join(PASTA, "assets", "img")
-PASTA_SND = os.path.join(PASTA, "assets", "snd")
-ARQUIVO_RANKING = os.path.join(PASTA, "ranking.txt")
+ARQUIVO_RANKING = "ranking.txt"
 
 # Cores (R, G, B)
+FUNDO = (15, 12, 40)
 BRANCO = (255, 255, 255)
 CINZA = (175, 180, 210)
 AMARELO = (255, 215, 90)
 VERDE = (90, 230, 140)
 VERMELHO = (255, 100, 110)
 AZUL_ESCURO = (30, 30, 70)
+COR_FRENTE = (240, 240, 245)
+COR_VERSO = (100, 60, 180)
 
 # Os 3 níveis: quantidade de cartas, tamanho da carta e tempo para memorizar (ms)
 NIVEIS = {
@@ -32,39 +44,50 @@ NIVEIS = {
     "Difícil": {"colunas": 6, "linhas": 4, "tamanho": 96,  "memorizar": 3000, "cor": (200, 60, 90)},
 }
 
-# Nomes das figuras (cada uma tem um arquivo .png com o mesmo nome)
-FIGURAS = ["foguete", "saturno", "terra", "lua", "sol", "ovni",
-           "alien", "astronauta", "cometa", "satelite", "galaxia", "brilho"]
+# 12 figuras. Cada figura = (forma, cor). As formas se repetem com cores diferentes.
+FIGURAS = [
+    ("circulo", (231, 76, 60)),     ("circulo", (52, 152, 219)),
+    ("quadrado", (46, 204, 113)),   ("quadrado", (155, 89, 182)),
+    ("triangulo", (241, 196, 15)),  ("triangulo", (230, 126, 34)),
+    ("losango", (26, 188, 156)),    ("losango", (232, 90, 160)),
+    ("cruz", (52, 73, 94)),         ("cruz", (192, 57, 43)),
+    ("anel", (41, 128, 185)),       ("anel", (39, 174, 96)),
+]
 
 # Cores das partículas que aparecem quando acerta um par
 CORES_PARTICULAS = [AMARELO, VERDE, (130, 210, 255), (240, 120, 255), BRANCO]
 
+# Estrelas do fundo: lista de posições (x, y) sorteadas uma vez só
+ESTRELAS = []
+for i in range(120):
+    ESTRELAS.append((random.randint(0, LARGURA), random.randint(0, ALTURA)))
 
-# ------------------------- CARREGAR IMAGENS, SONS E FONTES -------------------------
-def carregar_assets():
-    """Carrega tudo uma vez só e guarda num dicionário."""
-    assets = {}
 
-    # Imagens
-    assets["fundo"] = pygame.image.load(os.path.join(PASTA_IMG, "fundo.png")).convert()
-    assets["verso"] = pygame.image.load(os.path.join(PASTA_IMG, "verso.png")).convert_alpha()
-    for nome in FIGURAS:
-        assets[nome] = pygame.image.load(os.path.join(PASTA_IMG, nome + ".png")).convert_alpha()
+# ------------------------- SONS -------------------------
+def criar_som(notas):
+    """Cria um som a partir de uma lista de notas: [(frequência, duração), ...].
+    O som é uma onda que fica alternando entre "alto" (+3000) e "baixo" (-3000).
+    Quanto mais vezes por segundo ela alterna (frequência), mais agudo é o som."""
+    taxa = 22050                                # pontos do som por segundo
+    pontos = array("h")                         # lista de números inteiros (formato de áudio)
+    for frequencia, duracao in notas:
+        meia_onda = taxa // frequencia // 2     # quantos pontos fica em cima (ou embaixo)
+        for i in range(int(taxa * duracao)):
+            if (i // meia_onda) % 2 == 0:
+                pontos.append(3000)
+            else:
+                pontos.append(-3000)
+    return pygame.mixer.Sound(buffer=pontos)
 
-    # Sons
-    assets["som_virar"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "virar.wav"))
-    assets["som_acerto"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "acerto.wav"))
-    assets["som_erro"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "erro.wav"))
-    assets["som_vitoria"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "vitoria.wav"))
-    assets["som_clique"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "clique.wav"))
 
-    # Fontes
-    assets["fonte_titulo"] = pygame.font.SysFont("arial", 56, bold=True)
-    assets["fonte_grande"] = pygame.font.SysFont("arial", 44, bold=True)
-    assets["fonte"] = pygame.font.SysFont("arial", 26, bold=True)
-    assets["fonte_pequena"] = pygame.font.SysFont("arial", 20)
-
-    return assets
+def carregar_sons():
+    sons = {}
+    sons["virar"] = criar_som([(900, 0.04)])
+    sons["acerto"] = criar_som([(660, 0.08), (990, 0.15)])
+    sons["erro"] = criar_som([(220, 0.12), (160, 0.2)])
+    sons["vitoria"] = criar_som([(523, 0.12), (659, 0.12), (784, 0.12), (1047, 0.4)])
+    sons["clique"] = criar_som([(600, 0.05)])
+    return sons
 
 
 # ------------------------- FUNÇÕES DE DESENHO -------------------------
@@ -76,6 +99,12 @@ def escrever(janela, texto, fonte, cor, x, y):
     janela.blit(imagem, retangulo)
 
 
+def desenhar_fundo(janela):
+    janela.fill(FUNDO)
+    for estrela in ESTRELAS:
+        pygame.draw.circle(janela, BRANCO, estrela, 1)
+
+
 def desenhar_botao(janela, fonte, retangulo, texto, cor):
     """Desenha um botão. Se o mouse estiver em cima, a borda fica amarela."""
     pygame.draw.rect(janela, cor, retangulo, border_radius=16)
@@ -84,6 +113,44 @@ def desenhar_botao(janela, fonte, retangulo, texto, cor):
     else:
         pygame.draw.rect(janela, BRANCO, retangulo, 2, border_radius=16)
     escrever(janela, texto, fonte, BRANCO, retangulo.centerx, retangulo.centery)
+
+
+def desenhar_forma(superficie, forma, cor, tamanho):
+    """Desenha a forma no centro de uma superfície quadrada de lado `tamanho`."""
+    c = tamanho // 2            # centro
+    r = tamanho // 3            # "raio" da forma
+    if forma == "circulo":
+        pygame.draw.circle(superficie, cor, (c, c), r)
+    elif forma == "quadrado":
+        pygame.draw.rect(superficie, cor, (c - r, c - r, 2 * r, 2 * r))
+    elif forma == "triangulo":
+        pygame.draw.polygon(superficie, cor, [(c, c - r), (c - r, c + r), (c + r, c + r)])
+    elif forma == "losango":
+        pygame.draw.polygon(superficie, cor, [(c, c - r), (c + r, c), (c, c + r), (c - r, c)])
+    elif forma == "cruz":
+        pygame.draw.rect(superficie, cor, (c - r // 3, c - r, 2 * r // 3, 2 * r))
+        pygame.draw.rect(superficie, cor, (c - r, c - r // 3, 2 * r, 2 * r // 3))
+    elif forma == "anel":
+        pygame.draw.circle(superficie, cor, (c, c), r, r // 3)
+
+
+def criar_frente(forma, cor, tamanho):
+    """Cria a imagem da frente da carta: fundo claro + forma colorida."""
+    imagem = pygame.Surface((tamanho, tamanho))
+    imagem.fill(FUNDO)
+    pygame.draw.rect(imagem, COR_FRENTE, (0, 0, tamanho, tamanho), border_radius=14)
+    desenhar_forma(imagem, forma, cor, tamanho)
+    return imagem
+
+
+def criar_verso(tamanho):
+    """Cria a imagem do verso da carta: roxo com um círculo no meio."""
+    imagem = pygame.Surface((tamanho, tamanho))
+    imagem.fill(FUNDO)
+    pygame.draw.rect(imagem, COR_VERSO, (0, 0, tamanho, tamanho), border_radius=14)
+    pygame.draw.rect(imagem, (180, 150, 255), (0, 0, tamanho, tamanho), 3, border_radius=14)
+    pygame.draw.circle(imagem, AMARELO, (tamanho // 2, tamanho // 2), tamanho // 8)
+    return imagem
 
 
 # ------------------------- RANKING (arquivo de texto) -------------------------
@@ -138,9 +205,9 @@ def adicionar_no_ranking(ranking, nivel, nome, tentativas):
 class Carta(pygame.sprite.Sprite):
     """Uma carta. Todo Sprite precisa de self.image (o desenho) e self.rect (a posição)."""
 
-    def __init__(self, figura, img_frente, img_verso, x, y):
+    def __init__(self, numero, img_frente, img_verso, x, y):
         pygame.sprite.Sprite.__init__(self)
-        self.figura = figura            # nome da figura (usado para comparar o par)
+        self.numero = numero            # número da figura (cartas do mesmo par têm o mesmo número)
         self.img_frente = img_frente
         self.img_verso = img_verso
         self.image = img_frente         # começa virada para cima (fase de memorizar)
@@ -183,7 +250,7 @@ class Particula(pygame.sprite.Sprite):
 
 
 # ------------------------- TELA 1: MENU -------------------------
-def tela_menu(janela, assets, ranking, nome):
+def tela_menu(janela, fontes, sons, ranking, nome):
     """Devolve 3 coisas: a próxima tela, o nível escolhido e o nome digitado."""
     relogio = pygame.time.Clock()
 
@@ -218,80 +285,79 @@ def tela_menu(janela, assets, ranking, nome):
                 if mostrar_ranking:                      # clique fecha o ranking
                     mostrar_ranking = False
                 elif botao_ranking.collidepoint(evento.pos):
-                    assets["som_clique"].play()
+                    sons["clique"].play()
                     mostrar_ranking = True
                 else:
                     for nivel in botoes:
                         if botoes[nivel].collidepoint(evento.pos):
-                            assets["som_clique"].play()
+                            sons["clique"].play()
                             return "jogo", nivel, nome
 
         # ----- DESENHO -----
-        janela.blit(assets["fundo"], (0, 0))
+        desenhar_fundo(janela)
 
-        # 6 figuras enfileiradas no topo, só de enfeite
+        # 6 cartinhas no topo, só de enfeite
         x = 105
-        for figura in FIGURAS[:6]:
-            imagem = pygame.transform.scale(assets[figura], (70, 70))
-            janela.blit(imagem, (x, 30))
+        for i in range(6):
+            forma, cor = FIGURAS[i * 2]
+            janela.blit(criar_frente(forma, cor, 70), (x, 30))
             x = x + 85
 
-        escrever(janela, "Memória Espacial", assets["fonte_titulo"], BRANCO, LARGURA // 2, 155)
+        escrever(janela, "Jogo da Memória", fontes["titulo"], BRANCO, LARGURA // 2, 155)
 
         # Caixa do nome
         pygame.draw.rect(janela, AZUL_ESCURO, caixa_nome, border_radius=12)
         pygame.draw.rect(janela, CINZA, caixa_nome, 2, border_radius=12)
         if nome == "":
-            escrever(janela, "Digite seu nome...", assets["fonte_pequena"], CINZA,
-                     caixa_nome.centerx, caixa_nome.centery)
+            escrever(janela, "Digite seu nome...", fontes["pequena"], CINZA, caixa_nome.centerx, caixa_nome.centery)
         else:
-            escrever(janela, nome, assets["fonte"], BRANCO, caixa_nome.centerx, caixa_nome.centery)
+            escrever(janela, nome, fontes["normal"], BRANCO, caixa_nome.centerx, caixa_nome.centery)
 
         # Botões dos níveis
         for nivel in botoes:
             config = NIVEIS[nivel]
             qtd_cartas = config["colunas"] * config["linhas"]
             texto = nivel + "  -  " + str(qtd_cartas) + " cartas"
-            desenhar_botao(janela, assets["fonte"], botoes[nivel], texto, config["cor"])
+            desenhar_botao(janela, fontes["normal"], botoes[nivel], texto, config["cor"])
 
-        desenhar_botao(janela, assets["fonte"], botao_ranking, "Ranking", (90, 70, 170))
-        escrever(janela, "ESC = sair", assets["fonte_pequena"], CINZA, LARGURA // 2, ALTURA - 30)
+        desenhar_botao(janela, fontes["normal"], botao_ranking, "Ranking", (90, 70, 170))
+        escrever(janela, "ESC = sair", fontes["pequena"], CINZA, LARGURA // 2, ALTURA - 30)
 
         if mostrar_ranking:
-            desenhar_ranking(janela, assets, ranking)
+            desenhar_ranking(janela, fontes, ranking)
 
         pygame.display.update()
 
 
-def desenhar_ranking(janela, assets, ranking):
+def desenhar_ranking(janela, fontes, ranking):
     """Janela por cima do menu com o top 5 de cada nível (3 colunas)."""
     painel = pygame.Rect(30, 120, LARGURA - 60, 560)
     pygame.draw.rect(janela, AZUL_ESCURO, painel, border_radius=20)
     pygame.draw.rect(janela, AMARELO, painel, 3, border_radius=20)
-    escrever(janela, "Ranking - Top 5", assets["fonte_grande"], AMARELO, LARGURA // 2, 175)
+    escrever(janela, "Ranking - Top 5", fontes["grande"], AMARELO, LARGURA // 2, 175)
 
     x = 145                                         # centro da 1ª coluna
     for nivel in ranking:
-        escrever(janela, nivel, assets["fonte"], NIVEIS[nivel]["cor"], x, 250)
+        escrever(janela, nivel, fontes["normal"], NIVEIS[nivel]["cor"], x, 250)
 
         if len(ranking[nivel]) == 0:
-            escrever(janela, "ninguém ainda", assets["fonte_pequena"], CINZA, x, 300)
+            escrever(janela, "ninguém ainda", fontes["pequena"], CINZA, x, 300)
 
         y = 300
         colocacao = 1
         for jogador in ranking[nivel]:
-            escrever(janela, str(colocacao) + ". " + jogador["nome"], assets["fonte_pequena"], BRANCO, x, y)
-            escrever(janela, str(jogador["tentativas"]) + " tentativas", assets["fonte_pequena"], CINZA, x, y + 24)
+            escrever(janela, str(colocacao) + ". " + jogador["nome"], fontes["pequena"], BRANCO, x, y)
+            escrever(janela, str(jogador["tentativas"]) + " tentativas", fontes["pequena"], CINZA, x, y + 24)
             y = y + 65
             colocacao = colocacao + 1
 
         x = x + 215                                 # vai para a próxima coluna
 
-    escrever(janela, "Clique para fechar", assets["fonte_pequena"], CINZA, LARGURA // 2, 650)
+    escrever(janela, "Clique para fechar", fontes["pequena"], CINZA, LARGURA // 2, 650)
 
 
 # ------------------------- TELA 2: JOGO -------------------------
-def tela_jogo(janela, assets, nivel, nome, ranking):
+def tela_jogo(janela, fontes, sons, nivel, nome, ranking):
     """Devolve a próxima tela: "menu", "jogo" (jogar de novo) ou "sair"."""
     relogio = pygame.time.Clock()
     config = NIVEIS[nivel]
@@ -300,18 +366,18 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
     tamanho = config["tamanho"]
     qtd_pares = colunas * linhas // 2
 
-    # 1) Sorteia as figuras da partida e duplica (cada uma vira um par)
-    figuras = FIGURAS[:]                    # cópia da lista
-    random.shuffle(figuras)
-    figuras = figuras[:qtd_pares]
-    baralho = figuras + figuras
+    # 1) Sorteia quais figuras entram na partida e duplica (cada uma vira um par)
+    numeros = list(range(len(FIGURAS)))     # [0, 1, 2, ..., 11]
+    random.shuffle(numeros)
+    numeros = numeros[:qtd_pares]
+    baralho = numeros + numeros
     random.shuffle(baralho)
 
     # 2) Cria as cartas na grade, centralizada na tela
     largura_grade = colunas * tamanho + (colunas - 1) * ESPACO
     x_inicial = (LARGURA - largura_grade) // 2
     y_inicial = 190
-    img_verso = pygame.transform.scale(assets["verso"], (tamanho, tamanho))
+    img_verso = criar_verso(tamanho)
 
     cartas = pygame.sprite.Group()          # grupo com todas as cartas
     particulas = pygame.sprite.Group()      # grupo com as partículas
@@ -321,7 +387,8 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
         linha = i // colunas                # divisão inteira  -> linha
         x = x_inicial + coluna * (tamanho + ESPACO)
         y = y_inicial + linha * (tamanho + ESPACO)
-        img_frente = pygame.transform.scale(assets[baralho[i]], (tamanho, tamanho))
+        forma, cor = FIGURAS[baralho[i]]
+        img_frente = criar_frente(forma, cor, tamanho)
         cartas.add(Carta(baralho[i], img_frente, img_verso, x, y))
 
     # 3) Variáveis da partida
@@ -358,7 +425,7 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
                     for carta in cartas:
                         if carta.rect.collidepoint(evento.pos) and not carta.virada:
                             carta.virar_para_cima()
-                            assets["som_virar"].play()
+                            sons["virar"].play()
                             selecionadas.append(carta)
                             break
 
@@ -367,11 +434,11 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
                         carta1 = selecionadas[0]
                         carta2 = selecionadas[1]
 
-                        if carta1.figura == carta2.figura:        # ACERTOU
+                        if carta1.numero == carta2.numero:        # ACERTOU
                             carta1.encontrada = True
                             carta2.encontrada = True
                             pares = pares + 1
-                            assets["som_acerto"].play()
+                            sons["acerto"].play()
                             for k in range(20):                   # explosão de partículas
                                 particulas.add(Particula(carta1.rect.centerx, carta1.rect.centery))
                                 particulas.add(Particula(carta2.rect.centerx, carta2.rect.centery))
@@ -381,11 +448,11 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
                                 estado = "vitoria"
                                 tempo_final = (agora - inicio_jogo) // 1000
                                 posicao = adicionar_no_ranking(ranking, nivel, nome, tentativas)
-                                assets["som_vitoria"].play()
+                                sons["vitoria"].play()
                         else:                                     # ERROU
                             estado = "errou"
                             momento_erro = agora
-                            assets["som_erro"].play()
+                            sons["erro"].play()
 
         # ----- LÓGICA QUE DEPENDE DO TEMPO -----
         if estado == "memorizar" and agora - inicio >= config["memorizar"]:
@@ -403,9 +470,9 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
         particulas.update()            # chama o update() de cada partícula
 
         # ----- DESENHO -----
-        janela.blit(assets["fundo"], (0, 0))
+        desenhar_fundo(janela)
 
-        escrever(janela, "Nível " + nivel + "  -  " + nome, assets["fonte"], config["cor"], LARGURA // 2, 40)
+        escrever(janela, "Nível " + nivel + "  -  " + nome, fontes["normal"], config["cor"], LARGURA // 2, 40)
 
         # Cronômetro
         if estado == "memorizar":
@@ -416,18 +483,18 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
             segundos = (agora - inicio_jogo) // 1000
 
         pygame.draw.rect(janela, AZUL_ESCURO, (20, 75, LARGURA - 40, 50), border_radius=12)
-        escrever(janela, "Tentativas: " + str(tentativas), assets["fonte_pequena"], BRANCO, 130, 100)
-        escrever(janela, "Pares: " + str(pares) + "/" + str(qtd_pares), assets["fonte_pequena"], BRANCO, LARGURA // 2, 100)
-        escrever(janela, "Tempo: " + str(segundos) + "s", assets["fonte_pequena"], BRANCO, LARGURA - 130, 100)
+        escrever(janela, "Tentativas: " + str(tentativas), fontes["pequena"], BRANCO, 130, 100)
+        escrever(janela, "Pares: " + str(pares) + "/" + str(qtd_pares), fontes["pequena"], BRANCO, LARGURA // 2, 100)
+        escrever(janela, "Tempo: " + str(segundos) + "s", fontes["pequena"], BRANCO, LARGURA - 130, 100)
 
         # Mensagem do momento
         if estado == "memorizar":
             falta = (config["memorizar"] - (agora - inicio)) // 1000 + 1
-            escrever(janela, "Memorize! As cartas viram em " + str(falta) + "s", assets["fonte"], AMARELO, LARGURA // 2, 155)
+            escrever(janela, "Memorize! As cartas viram em " + str(falta) + "s", fontes["normal"], AMARELO, LARGURA // 2, 155)
         elif estado == "errou":
-            escrever(janela, "Não é par!", assets["fonte"], VERMELHO, LARGURA // 2, 155)
+            escrever(janela, "Não é par!", fontes["normal"], VERMELHO, LARGURA // 2, 155)
         elif estado == "jogando":
-            escrever(janela, "Encontre os pares!", assets["fonte_pequena"], CINZA, LARGURA // 2, 155)
+            escrever(janela, "Encontre os pares!", fontes["pequena"], CINZA, LARGURA // 2, 155)
 
         cartas.draw(janela)            # desenha todas as cartas do grupo
 
@@ -440,15 +507,15 @@ def tela_jogo(janela, assets, nivel, nome, ranking):
 
         particulas.draw(janela)        # desenha todas as partículas do grupo
 
-        escrever(janela, "R = reiniciar   |   ESC = menu", assets["fonte_pequena"], CINZA, LARGURA // 2, ALTURA - 25)
+        escrever(janela, "R = reiniciar   |   ESC = menu", fontes["pequena"], CINZA, LARGURA // 2, ALTURA - 25)
 
         if estado == "vitoria":
-            desenhar_vitoria(janela, assets, tentativas, tempo_final, posicao)
+            desenhar_vitoria(janela, fontes, tentativas, tempo_final, posicao)
 
         pygame.display.update()
 
 
-def desenhar_vitoria(janela, assets, tentativas, tempo, posicao):
+def desenhar_vitoria(janela, fontes, tentativas, tempo, posicao):
     """Escurece a tela e mostra o resultado da partida."""
     escuro = pygame.Surface((LARGURA, ALTURA))
     escuro.set_alpha(170)                           # 0 = invisível, 255 = opaco
@@ -459,33 +526,34 @@ def desenhar_vitoria(janela, assets, tentativas, tempo, posicao):
     pygame.draw.rect(janela, AZUL_ESCURO, painel, border_radius=20)
     pygame.draw.rect(janela, AMARELO, painel, 3, border_radius=20)
 
-    escrever(janela, "Missão cumprida!", assets["fonte_grande"], AMARELO, LARGURA // 2, 290)
+    escrever(janela, "Parabéns!", fontes["grande"], AMARELO, LARGURA // 2, 290)
     escrever(janela, str(tentativas) + " tentativas em " + str(tempo) + " segundos",
-             assets["fonte"], BRANCO, LARGURA // 2, 370)
+             fontes["normal"], BRANCO, LARGURA // 2, 370)
 
     if posicao == 1:
-        escrever(janela, "NOVO RECORDE! 1º lugar", assets["fonte"], VERDE, LARGURA // 2, 430)
+        escrever(janela, "NOVO RECORDE! 1º lugar", fontes["normal"], VERDE, LARGURA // 2, 430)
     elif posicao > 1:
-        escrever(janela, "Você ficou em " + str(posicao) + "º no ranking!", assets["fonte"], VERDE, LARGURA // 2, 430)
+        escrever(janela, "Você ficou em " + str(posicao) + "º no ranking!", fontes["normal"], VERDE, LARGURA // 2, 430)
     else:
-        escrever(janela, "Não entrou no top 5. Tente de novo!", assets["fonte"], CINZA, LARGURA // 2, 430)
+        escrever(janela, "Não entrou no top 5. Tente de novo!", fontes["normal"], CINZA, LARGURA // 2, 430)
 
-    escrever(janela, "R = jogar de novo   |   clique = menu", assets["fonte_pequena"], CINZA, LARGURA // 2, 530)
+    escrever(janela, "R = jogar de novo   |   clique = menu", fontes["pequena"], CINZA, LARGURA // 2, 530)
 
 
 # ------------------------- PROGRAMA PRINCIPAL -------------------------
+pygame.mixer.pre_init(22050, -16, 1)      # som: 22050 pontos/s, 16 bits, 1 canal (mono)
 pygame.init()
-pygame.mixer.init()
 janela = pygame.display.set_mode((LARGURA, ALTURA))
-pygame.display.set_caption("Memória Espacial")
+pygame.display.set_caption("Jogo da Memória")
 
-assets = carregar_assets()
+fontes = {
+    "titulo": pygame.font.SysFont("arial", 56, bold=True),
+    "grande": pygame.font.SysFont("arial", 44, bold=True),
+    "normal": pygame.font.SysFont("arial", 26, bold=True),
+    "pequena": pygame.font.SysFont("arial", 20),
+}
+sons = carregar_sons()
 ranking = carregar_ranking()
-
-# Música de fundo tocando sem parar (-1 = repetir para sempre)
-pygame.mixer.music.load(os.path.join(PASTA_SND, "musica.wav"))
-pygame.mixer.music.set_volume(0.4)
-pygame.mixer.music.play(-1)
 
 tela = "menu"
 nivel = None
@@ -494,10 +562,10 @@ nome = ""
 # Cada função de tela devolve qual é a próxima tela
 while tela != "sair":
     if tela == "menu":
-        tela, nivel, nome = tela_menu(janela, assets, ranking, nome)
+        tela, nivel, nome = tela_menu(janela, fontes, sons, ranking, nome)
     elif tela == "jogo":
         if nome == "":
             nome = "Anônimo"
-        tela = tela_jogo(janela, assets, nivel, nome, ranking)
+        tela = tela_jogo(janela, fontes, sons, nivel, nome, ranking)
 
 pygame.quit()
