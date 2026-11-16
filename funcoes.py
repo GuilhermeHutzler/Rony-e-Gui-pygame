@@ -247,5 +247,5 @@ class Jogo:
             self.clock.tick(FPS)
 
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     Jogo().rodar()
