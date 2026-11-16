@@ -1,799 +1,503 @@
-
-
-import math
+import os
 import random
-import sys
-
 import pygame
 
-# =============================== CONFIGURAÇÕES ===============================
-LARGURA, ALTURA = 720, 820
+# ------------------------- CONFIGURAÇÕES -------------------------
+LARGURA = 720
+ALTURA = 820
 FPS = 60
+ESPACO = 12                 # espaço entre as cartas (em pixels)
+TEMPO_ERRO = 800            # quanto tempo (ms) um par errado fica aparecendo
+TAM_RANKING = 5             # quantas pessoas aparecem no ranking de cada nível
+TAM_NOME = 12               # máximo de letras do nome
 
-ESPACO = 12               # espaço (px) entre as cartas
-AREA_TOPO = 175           # onde a grade de cartas começa (y)
-AREA_BASE = 55            # margem livre embaixo da grade
-VELOCIDADE_GIRO = 6       # velocidade da animação de virar (maior = mais rápido)
+# Pastas: o caminho é montado a partir da pasta onde este arquivo está
+PASTA = os.path.dirname(os.path.abspath(__file__))
+PASTA_IMG = os.path.join(PASTA, "assets", "img")
+PASTA_SND = os.path.join(PASTA, "assets", "snd")
+ARQUIVO_RANKING = os.path.join(PASTA, "ranking.txt")
 
 # Cores (R, G, B)
-COR_FRENTE = (22, 26, 58)        # fundo da frente da carta (azul-noite)
-COR_FRENTE_BORDA = (120, 130, 200)
-COR_VERSO_1 = (120, 70, 200)     # verso: degradê do roxo...
-COR_VERSO_2 = (50, 30, 120)      # ...para o azul escuro
-COR_VERSO_BORDA = (190, 160, 255)
-COR_ACERTO = (90, 230, 140)
-COR_ERRO = (255, 100, 110)
-COR_PAINEL = (30, 30, 70)
-AMARELO = (255, 215, 90)
 BRANCO = (255, 255, 255)
 CINZA = (175, 180, 210)
+AMARELO = (255, 215, 90)
+VERDE = (90, 230, 140)
+VERMELHO = (255, 100, 110)
+AZUL_ESCURO = (30, 30, 70)
 
-# Os 3 níveis. colunas x linhas = quantidade de cartas.
-NIVEIS = [
-    {"nome": "Fácil",   "patente": "Cadete",     "colunas": 4, "linhas": 3,
-     "memorizar": 5000, "erro": 1000, "cor": (60, 170, 120)},
-    {"nome": "Médio",   "patente": "Piloto",     "colunas": 4, "linhas": 4,
-     "memorizar": 4000, "erro": 800,  "cor": (210, 140, 40)},
-    {"nome": "Difícil", "patente": "Comandante", "colunas": 6, "linhas": 4,
-     "memorizar": 3000, "erro": 600,  "cor": (200, 60, 90)},
-]
+# Os 3 níveis: quantidade de cartas, tamanho da carta e tempo para memorizar (ms)
+NIVEIS = {
+    "Fácil":   {"colunas": 4, "linhas": 3, "tamanho": 140, "memorizar": 5000, "cor": (60, 170, 120)},
+    "Médio":   {"colunas": 4, "linhas": 4, "tamanho": 130, "memorizar": 4000, "cor": (210, 140, 40)},
+    "Difícil": {"colunas": 6, "linhas": 4, "tamanho": 96,  "memorizar": 3000, "cor": (200, 60, 90)},
+}
 
-# 12 figuras: (nome, cor principal). A cor também é usada nas partículas.
-FIGURAS = [
-    ("foguete",    (240, 80, 80)),
-    ("saturno",    (235, 180, 90)),
-    ("terra",      (70, 150, 240)),
-    ("lua",        (240, 230, 170)),
-    ("sol",        (255, 190, 50)),
-    ("ovni",       (150, 230, 255)),
-    ("alien",      (120, 230, 120)),
-    ("astronauta", (230, 230, 245)),
-    ("cometa",     (130, 210, 255)),
-    ("satelite",   (225, 185, 80)),
-    ("galaxia",    (210, 120, 255)),
-    ("brilho",     (255, 240, 120)),
-]
+# Nomes das figuras (cada uma tem um arquivo .png com o mesmo nome)
+FIGURAS = ["foguete", "saturno", "terra", "lua", "sol", "ovni",
+           "alien", "astronauta", "cometa", "satelite", "galaxia", "brilho"]
+
+# Cores das partículas que aparecem quando acerta um par
+CORES_PARTICULAS = [AMARELO, VERDE, (130, 210, 255), (240, 120, 255), BRANCO]
 
 
-# =============================== FUNÇÕES AUXILIARES ===============================
-def texto(tela, msg, fonte, cor, centro):
-    """Escreve um texto centralizado no ponto `centro`."""
-    surf = fonte.render(msg, True, cor)
-    tela.blit(surf, surf.get_rect(center=centro))
+# ------------------------- CARREGAR IMAGENS, SONS E FONTES -------------------------
+def carregar_assets():
+    """Carrega tudo uma vez só e guarda num dicionário."""
+    assets = {}
+
+    # Imagens
+    assets["fundo"] = pygame.image.load(os.path.join(PASTA_IMG, "fundo.png")).convert()
+    assets["verso"] = pygame.image.load(os.path.join(PASTA_IMG, "verso.png")).convert_alpha()
+    for nome in FIGURAS:
+        assets[nome] = pygame.image.load(os.path.join(PASTA_IMG, nome + ".png")).convert_alpha()
+
+    # Sons
+    assets["som_virar"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "virar.wav"))
+    assets["som_acerto"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "acerto.wav"))
+    assets["som_erro"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "erro.wav"))
+    assets["som_vitoria"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "vitoria.wav"))
+    assets["som_clique"] = pygame.mixer.Sound(os.path.join(PASTA_SND, "clique.wav"))
+
+    # Fontes
+    assets["fonte_titulo"] = pygame.font.SysFont("arial", 56, bold=True)
+    assets["fonte_grande"] = pygame.font.SysFont("arial", 44, bold=True)
+    assets["fonte"] = pygame.font.SysFont("arial", 26, bold=True)
+    assets["fonte_pequena"] = pygame.font.SysFont("arial", 20)
+
+    return assets
 
 
-def degrade(tamanho, cor_cima, cor_baixo):
-    """Cria uma imagem com degradê vertical, desenhando uma linha de cada cor."""
-    larg, alt = tamanho
-    img = pygame.Surface(tamanho)
-    for y in range(alt):
-        t = y / max(1, alt - 1)                                   # 0 em cima, 1 embaixo
-        cor = [int(a + (b - a) * t) for a, b in zip(cor_cima, cor_baixo)]
-        pygame.draw.line(img, cor, (0, y), (larg, y))
-    return img
+# ------------------------- FUNÇÕES DE DESENHO -------------------------
+def escrever(janela, texto, fonte, cor, x, y):
+    """Escreve um texto com o CENTRO no ponto (x, y)."""
+    imagem = fonte.render(texto, True, cor)
+    retangulo = imagem.get_rect()
+    retangulo.center = (x, y)
+    janela.blit(imagem, retangulo)
 
 
-def poligono_transparente(sup, cor_rgba, pontos):
-    """Desenha um polígono semitransparente (ex.: rastro do cometa).
-    O pygame só mistura transparência ao colar (blit) uma imagem,
-    então desenhamos numa imagem temporária e colamos."""
-    xs = [p[0] for p in pontos]
-    ys = [p[1] for p in pontos]
-    x0, y0 = int(min(xs)), int(min(ys))
-    temp = pygame.Surface((int(max(xs)) - x0 + 1, int(max(ys)) - y0 + 1), pygame.SRCALPHA)
-    pygame.draw.polygon(temp, cor_rgba, [(x - x0, y - y0) for x, y in pontos])
-    sup.blit(temp, (x0, y0))
+def desenhar_botao(janela, fonte, retangulo, texto, cor):
+    """Desenha um botão. Se o mouse estiver em cima, a borda fica amarela."""
+    pygame.draw.rect(janela, cor, retangulo, border_radius=16)
+    if retangulo.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(janela, AMARELO, retangulo, 4, border_radius=16)
+    else:
+        pygame.draw.rect(janela, BRANCO, retangulo, 2, border_radius=16)
+    escrever(janela, texto, fonte, BRANCO, retangulo.centerx, retangulo.centery)
 
 
-def pontos_estrela(cx, cy, raio_ext, raio_int, pontas=5):
-    """Vértices de uma estrela: alterna entre o raio externo e o interno."""
-    pontos = []
-    for i in range(pontas * 2):
-        ang = -math.pi / 2 + i * math.pi / pontas
-        raio = raio_ext if i % 2 == 0 else raio_int
-        pontos.append((cx + raio * math.cos(ang), cy + raio * math.sin(ang)))
-    return pontos
+# ------------------------- RANKING (arquivo de texto) -------------------------
+# Cada linha do arquivo ranking.txt tem o formato:   nivel;nome;tentativas
+# Exemplo:   Fácil;Rony;7
+
+def carregar_ranking():
+    """Lê o arquivo e monta um dicionário: nível -> lista de jogadores."""
+    ranking = {"Fácil": [], "Médio": [], "Difícil": []}
+
+    if not os.path.exists(ARQUIVO_RANKING):     # 1ª vez: o arquivo ainda não existe
+        return ranking
+
+    with open(ARQUIVO_RANKING, "r", encoding="utf-8") as arquivo:
+        for linha in arquivo:
+            partes = linha.strip().split(";")
+            if len(partes) == 3 and partes[0] in ranking:
+                nivel = partes[0]
+                jogador = {"nome": partes[1], "tentativas": int(partes[2])}
+                ranking[nivel].append(jogador)
+    return ranking
 
 
-# =============================== AS 12 FIGURAS ===============================
-def desenhar_figura(sup, nome, rect):
-    """Desenha a figura `nome` dentro de `rect`.
-    Tudo é calculado a partir de `r` (proporcional ao tamanho da carta),
-    por isso a mesma figura funciona em cartas grandes e pequenas."""
-    cx, cy = rect.center
-    r = rect.width * 0.32
-    e = max(2, int(r / 8))   # espessura de linhas
-
-    if nome == "foguete":
-        # chama (laranja por fora, amarela por dentro)
-        pygame.draw.polygon(sup, (255, 140, 40), [(cx - 0.25 * r, cy + 0.5 * r), (cx + 0.25 * r, cy + 0.5 * r), (cx, cy + 1.05 * r)])
-        pygame.draw.polygon(sup, (255, 230, 90), [(cx - 0.12 * r, cy + 0.5 * r), (cx + 0.12 * r, cy + 0.5 * r), (cx, cy + 0.8 * r)])
-        # aletas
-        pygame.draw.polygon(sup, (220, 60, 70), [(cx - 0.35 * r, cy + 0.05 * r), (cx - 0.75 * r, cy + 0.6 * r), (cx - 0.35 * r, cy + 0.5 * r)])
-        pygame.draw.polygon(sup, (220, 60, 70), [(cx + 0.35 * r, cy + 0.05 * r), (cx + 0.75 * r, cy + 0.6 * r), (cx + 0.35 * r, cy + 0.5 * r)])
-        # corpo e bico
-        pygame.draw.rect(sup, (235, 235, 245), (cx - 0.35 * r, cy - 0.45 * r, 0.7 * r, 0.95 * r))
-        pygame.draw.polygon(sup, (240, 80, 80), [(cx, cy - 1.05 * r), (cx + 0.35 * r, cy - 0.45 * r), (cx - 0.35 * r, cy - 0.45 * r)])
-        # janelinha
-        pygame.draw.circle(sup, (90, 180, 255), (cx, cy - 0.1 * r), 0.19 * r)
-        pygame.draw.circle(sup, (120, 130, 160), (cx, cy - 0.1 * r), 0.19 * r, max(1, e // 2))
-
-    elif nome == "saturno":
-        anel = pygame.Rect(0, 0, 2.3 * r, 0.75 * r)
-        anel.center = (cx, cy)
-        pygame.draw.ellipse(sup, (245, 225, 170), anel, e)                    # anel (parte de trás)
-        pygame.draw.circle(sup, (235, 170, 80), (cx, cy), 0.62 * r)           # planeta
-        pygame.draw.line(sup, (200, 130, 60), (cx - 0.55 * r, cy - 0.2 * r), (cx + 0.55 * r, cy - 0.2 * r), e)
-        pygame.draw.arc(sup, (245, 225, 170), anel, math.pi, 2 * math.pi, e)  # anel (parte da frente)
-
-    elif nome == "terra":
-        pygame.draw.circle(sup, (60, 130, 230), (cx, cy), 0.85 * r)          # oceano
-        pygame.draw.ellipse(sup, (80, 195, 100), (cx - 0.6 * r, cy - 0.55 * r, 0.55 * r, 0.45 * r))
-        pygame.draw.ellipse(sup, (80, 195, 100), (cx + 0.0 * r, cy - 0.2 * r, 0.5 * r, 0.65 * r))
-        pygame.draw.ellipse(sup, (80, 195, 100), (cx - 0.5 * r, cy + 0.2 * r, 0.35 * r, 0.3 * r))
-        pygame.draw.circle(sup, (160, 220, 255), (cx, cy), 0.85 * r, max(1, e // 2))  # atmosfera
-
-    elif nome == "lua":
-        pygame.draw.circle(sup, (240, 230, 170), (cx, cy), 0.8 * r)
-        pygame.draw.circle(sup, (200, 190, 140), (cx - 0.35 * r, cy + 0.25 * r), 0.14 * r)   # crateras
-        pygame.draw.circle(sup, (200, 190, 140), (cx - 0.15 * r, cy - 0.4 * r), 0.1 * r)
-        # um círculo da cor do fundo "morde" a lua e forma a meia-lua
-        pygame.draw.circle(sup, COR_FRENTE, (cx + 0.4 * r, cy - 0.2 * r), 0.68 * r)
-
-    elif nome == "sol":
-        for i in range(12):                                                  # raios
-            ang = i * math.pi / 6
-            p1 = (cx + math.cos(ang) * 0.65 * r, cy + math.sin(ang) * 0.65 * r)
-            p2 = (cx + math.cos(ang) * 1.0 * r, cy + math.sin(ang) * 1.0 * r)
-            pygame.draw.line(sup, (255, 150, 40), p1, p2, e)
-        pygame.draw.circle(sup, (255, 190, 50), (cx, cy), 0.58 * r)
-        pygame.draw.circle(sup, (255, 230, 120), (cx, cy), 0.38 * r)
-
-    elif nome == "ovni":
-        # feixe de luz semitransparente
-        poligono_transparente(sup, (255, 255, 150, 90),
-                              [(cx - 0.3 * r, cy + 0.2 * r), (cx + 0.3 * r, cy + 0.2 * r),
-                               (cx + 0.65 * r, cy + 1.0 * r), (cx - 0.65 * r, cy + 1.0 * r)])
-        pygame.draw.circle(sup, (150, 230, 255), (cx, cy - 0.15 * r), 0.42 * r)        # cúpula
-        pygame.draw.ellipse(sup, (175, 185, 205), (cx - r, cy - 0.25 * r, 2 * r, 0.6 * r))  # disco
-        for i in range(5):                                                   # luzinhas
-            x = cx - 0.6 * r + i * 0.3 * r
-            pygame.draw.circle(sup, (255, 220, 60), (x, cy + 0.05 * r), max(2, 0.08 * r))
-
-    elif nome == "alien":
-        # antenas
-        pygame.draw.line(sup, (120, 230, 120), (cx - 0.25 * r, cy - 0.7 * r), (cx - 0.5 * r, cy - 1.0 * r), e)
-        pygame.draw.line(sup, (120, 230, 120), (cx + 0.25 * r, cy - 0.7 * r), (cx + 0.5 * r, cy - 1.0 * r), e)
-        pygame.draw.circle(sup, (255, 120, 200), (cx - 0.5 * r, cy - 1.0 * r), 0.1 * r)
-        pygame.draw.circle(sup, (255, 120, 200), (cx + 0.5 * r, cy - 1.0 * r), 0.1 * r)
-        # cabeça
-        pygame.draw.ellipse(sup, (120, 230, 120), (cx - 0.65 * r, cy - 0.8 * r, 1.3 * r, 1.65 * r))
-        # olhos grandes com brilho
-        for lado in (-1, 1):
-            olho = pygame.Rect(0, 0, 0.42 * r, 0.55 * r)
-            olho.center = (cx + lado * 0.27 * r, cy - 0.1 * r)
-            pygame.draw.ellipse(sup, (20, 20, 30), olho)
-            pygame.draw.circle(sup, BRANCO, (olho.centerx - 0.06 * r, olho.centery - 0.1 * r), max(1, 0.07 * r))
-        # sorriso
-        boca = pygame.Rect(0, 0, 0.4 * r, 0.25 * r)
-        boca.center = (cx, cy + 0.45 * r)
-        pygame.draw.arc(sup, (30, 80, 30), boca, math.pi, 2 * math.pi, max(1, e // 2))
-
-    elif nome == "astronauta":
-        pygame.draw.rect(sup, (170, 175, 195), (cx - 0.95 * r, cy - 0.2 * r, 0.3 * r, 0.4 * r), border_radius=3)
-        pygame.draw.rect(sup, (170, 175, 195), (cx + 0.65 * r, cy - 0.2 * r, 0.3 * r, 0.4 * r), border_radius=3)
-        pygame.draw.circle(sup, (235, 235, 245), (cx, cy), 0.8 * r)                    # capacete
-        visor = pygame.Rect(0, 0, 1.1 * r, 0.75 * r)
-        visor.center = (cx, cy)
-        pygame.draw.ellipse(sup, (40, 60, 130), visor)                                  # visor
-        pygame.draw.ellipse(sup, (120, 170, 255), (visor.x + 0.15 * r, visor.y + 0.1 * r, 0.35 * r, 0.18 * r))  # reflexo
-
-    elif nome == "cometa":
-        cabeca = (cx + 0.45 * r, cy - 0.45 * r)
-        poligono_transparente(sup, (120, 200, 255, 110),     # cauda larga
-                              [(cabeca[0] - 0.3 * r, cabeca[1] - 0.25 * r), (cx - 1.0 * r, cy + 1.0 * r),
-                               (cabeca[0] + 0.25 * r, cabeca[1] + 0.3 * r)])
-        poligono_transparente(sup, (200, 240, 255, 170),     # cauda fina
-                              [(cabeca[0] - 0.15 * r, cabeca[1] - 0.1 * r), (cx - 0.7 * r, cy + 0.7 * r),
-                               (cabeca[0] + 0.1 * r, cabeca[1] + 0.15 * r)])
-        pygame.draw.circle(sup, (210, 245, 255), cabeca, 0.33 * r)
-
-    elif nome == "satelite":
-        for lado in (-1, 1):                                                # painéis solares
-            painel = pygame.Rect(0, 0, 0.6 * r, 0.5 * r)
-            painel.center = (cx + lado * 0.72 * r, cy)
-            pygame.draw.line(sup, (180, 180, 190), (cx, cy), painel.center, e)
-            pygame.draw.rect(sup, (50, 110, 220), painel)
-            pygame.draw.line(sup, (140, 190, 255), painel.midtop, painel.midbottom, 1)
-            pygame.draw.line(sup, (140, 190, 255), painel.midleft, painel.midright, 1)
-        pygame.draw.rect(sup, (225, 185, 80), (cx - 0.25 * r, cy - 0.35 * r, 0.5 * r, 0.7 * r), border_radius=3)
-        pygame.draw.line(sup, (200, 200, 210), (cx, cy - 0.35 * r), (cx, cy - 0.75 * r), max(1, e // 2))
-        pygame.draw.circle(sup, (230, 230, 240), (cx, cy - 0.8 * r), 0.15 * r)
-
-    elif nome == "galaxia":
-        # dois braços em espiral: o ângulo e o raio crescem juntos
-        for braco in range(2):
-            for i in range(30):
-                t = i / 30
-                ang = braco * math.pi + t * 3 * math.pi
-                raio = t * 0.95 * r
-                x = cx + math.cos(ang) * raio
-                y = cy + math.sin(ang) * raio * 0.7          # achatada = vista inclinada
-                cor = (int(255 - 90 * t), int(150 - 60 * t), 255)
-                pygame.draw.circle(sup, cor, (x, y), max(1, 0.12 * r * (1 - t) + 1))
-        pygame.draw.circle(sup, (255, 230, 255), (cx, cy), 0.16 * r)
-
-    elif nome == "brilho":
-        pygame.draw.polygon(sup, (255, 240, 120), pontos_estrela(cx, cy, 0.95 * r, 0.25 * r, pontas=4))
-        pygame.draw.polygon(sup, (255, 255, 220), pontos_estrela(cx, cy, 0.45 * r, 0.12 * r, pontas=4))
-        pygame.draw.polygon(sup, (255, 240, 120), pontos_estrela(cx + 0.65 * r, cy - 0.6 * r, 0.25 * r, 0.07 * r, pontas=4))
-        pygame.draw.polygon(sup, (255, 240, 120), pontos_estrela(cx - 0.6 * r, cy + 0.65 * r, 0.2 * r, 0.06 * r, pontas=4))
+def salvar_ranking(ranking):
+    """Escreve o ranking inteiro no arquivo (uma linha por jogador)."""
+    with open(ARQUIVO_RANKING, "w", encoding="utf-8") as arquivo:
+        for nivel in ranking:
+            for jogador in ranking[nivel]:
+                arquivo.write(nivel + ";" + jogador["nome"] + ";" + str(jogador["tentativas"]) + "\n")
 
 
-# =============================== CÉU ESTRELADO (fundo animado) ===============================
-class CeuEstrelado:
-    """Fundo das duas telas: degradê + nebulosas + estrelas que piscam e descem devagar."""
+def adicionar_no_ranking(ranking, nivel, nome, tentativas):
+    """Coloca o jogador na posição certa (menos tentativas = melhor).
+    Devolve a colocação (1 a 5) ou 0 se ele não entrou no top 5."""
+    lista = ranking[nivel]
 
-    def __init__(self, qtd=140):
-        self.imagem = degrade((LARGURA, ALTURA), (8, 6, 28), (35, 18, 60))
-        # nebulosas: círculos grandes bem transparentes
-        for cor, pos, raio in [((120, 50, 200, 35), (150, 250), 220),
-                               ((40, 120, 220, 30), (600, 600), 260),
-                               ((220, 60, 150, 25), (500, 150), 160)]:
-            nuvem = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
-            for k in range(6, 0, -1):     # vários círculos = borda suave
-                pygame.draw.circle(nuvem, cor, (raio, raio), raio * k // 6)
-            self.imagem.blit(nuvem, (pos[0] - raio, pos[1] - raio))
+    # anda pela lista até achar alguém com MAIS tentativas que o jogador
+    posicao = 0
+    while posicao < len(lista) and lista[posicao]["tentativas"] <= tentativas:
+        posicao += 1
 
-        # cada estrela = [x, y, velocidade, fase do piscar]
-        self.estrelas = [[random.uniform(0, LARGURA), random.uniform(0, ALTURA),
-                          random.uniform(4, 25), random.uniform(0, 6.28)] for _ in range(qtd)]
-        self.tempo = 0
+    lista.insert(posicao, {"nome": nome, "tentativas": tentativas})
+    ranking[nivel] = lista[:TAM_RANKING]          # guarda só os 5 primeiros
+    salvar_ranking(ranking)
 
-    def atualizar(self, dt):
-        self.tempo += dt
-        for estrela in self.estrelas:
-            estrela[1] += estrela[2] * dt          # desce devagar
-            if estrela[1] > ALTURA:                # saiu embaixo -> volta em cima
-                estrela[1] = 0
-                estrela[0] = random.uniform(0, LARGURA)
-
-    def desenhar(self, tela):
-        tela.blit(self.imagem, (0, 0))
-        for x, y, vel, fase in self.estrelas:
-            brilho = 150 + 105 * math.sin(self.tempo * 3 + fase)    # pisca com seno
-            tamanho = 2 if vel > 18 else 1                          # as rápidas parecem mais perto
-            pygame.draw.circle(tela, (brilho, brilho, 255), (x, y), tamanho)
+    if posicao < TAM_RANKING:
+        return posicao + 1      # +1 porque a lista começa no 0
+    return 0
 
 
-# =============================== PARTÍCULAS ===============================
-class Particula:
-    """Pontinho que voa, cai com gravidade e some. Usado nos acertos e no confete."""
+# ------------------------- SPRITES -------------------------
+class Carta(pygame.sprite.Sprite):
+    """Uma carta. Todo Sprite precisa de self.image (o desenho) e self.rect (a posição)."""
 
-    def __init__(self, x, y, cor, vx=None, vy=None):
-        if vx is None:                         # explosão: direção aleatória
-            ang = random.uniform(0, 2 * math.pi)
-            vel = random.uniform(80, 320)
-            vx, vy = math.cos(ang) * vel, math.sin(ang) * vel - 80
-        self.x, self.y = x, y
-        self.vx, self.vy = vx, vy
-        self.cor = cor
-        self.vida = self.vida_total = random.uniform(0.7, 1.4)
-        self.tamanho = random.uniform(2, 5)
+    def __init__(self, figura, img_frente, img_verso, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.figura = figura            # nome da figura (usado para comparar o par)
+        self.img_frente = img_frente
+        self.img_verso = img_verso
+        self.image = img_frente         # começa virada para cima (fase de memorizar)
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.virada = True              # True = mostrando a figura
+        self.encontrada = False         # True = o par já foi achado
 
-    def atualizar(self, dt):
-        self.vy += 350 * dt          # gravidade
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.vida -= dt
+    def virar_para_cima(self):
+        self.virada = True
+        self.image = self.img_frente
 
-    def desenhar(self, tela):
-        raio = self.tamanho * self.vida / self.vida_total   # encolhe até sumir
-        if raio > 0.5:
-            pygame.draw.circle(tela, self.cor, (self.x, self.y), raio)
-
-
-# =============================== BOTÃO ===============================
-class Botao:
-    """Retângulo clicável. Brilha e cresce quando o mouse passa por cima.
-    É usado nas duas telas (o menu.py importa esta classe)."""
-
-    def __init__(self, rect, texto, cor, subtexto=""):
-        self.rect = pygame.Rect(rect)
-        self.texto = texto
-        self.subtexto = subtexto
-        self.cor = cor
-
-    def desenhar(self, tela, fonte, fonte_sub, mouse):
-        rect, cor = self.rect, self.cor
-        hover = self.rect.collidepoint(mouse)
-        if hover:
-            cor = tuple(min(255, c + 35) for c in cor)
-            rect = self.rect.inflate(10, 8)
-            # brilho em volta
-            pygame.draw.rect(tela, cor, rect.inflate(10, 10), 2, border_radius=22)
-
-        pygame.draw.rect(tela, cor, rect, border_radius=18)
-        # faixa clara em cima = efeito de "vidro"
-        brilho = pygame.Surface((rect.width - 16, rect.height // 2 - 4), pygame.SRCALPHA)
-        pygame.draw.rect(brilho, (255, 255, 255, 40), brilho.get_rect(), border_radius=14)
-        tela.blit(brilho, (rect.x + 8, rect.y + 5))
-        pygame.draw.rect(tela, BRANCO, rect, 2, border_radius=18)
-
-        if self.subtexto:
-            texto(tela, self.texto, fonte, BRANCO, (rect.centerx, rect.centery - 14))
-            texto(tela, self.subtexto, fonte_sub, BRANCO, (rect.centerx, rect.centery + 20))
-        else:
-            texto(tela, self.texto, fonte, BRANCO, rect.center)
-
-    def clicado(self, pos):
-        return self.rect.collidepoint(pos)
-
-
-# =============================== CARTA ===============================
-class Carta:
-    """Uma carta do jogo.
-
-    Estados lógicos:  virada (frente para cima?) e encontrada (par já achado?).
-    Animação: `progresso` vai de 0 (verso) até 1 (frente). A largura desenhada é
-    |cos(progresso * pi)|: a carta afina até sumir e volta mostrando o outro lado.
-    """
-
-    def __init__(self, id_figura, x, y, tamanho):
-        self.id = id_figura
-        self.rect = pygame.Rect(x, y, tamanho, tamanho)
+    def virar_para_baixo(self):
         self.virada = False
-        self.encontrada = False
-        self.progresso = 0.0
-
-        # As imagens são desenhadas UMA vez e depois só redimensionadas.
-        self.img_frente = self.criar_frente(COR_FRENTE_BORDA)
-        self.img_acerto = self.criar_frente(COR_ACERTO)
-        self.img_verso = self.criar_verso()
-
-    def criar_frente(self, cor_borda):
-        img = pygame.Surface(self.rect.size, pygame.SRCALPHA)
-        r = img.get_rect()
-        pygame.draw.rect(img, COR_FRENTE, r, border_radius=14)
-        for _ in range(6):   # estrelinhas no fundo da carta
-            pygame.draw.circle(img, (90, 100, 160), (random.randint(8, r.w - 8), random.randint(8, r.h - 8)), 1)
-        nome, _cor = FIGURAS[self.id]
-        desenhar_figura(img, nome, r)
-        pygame.draw.rect(img, cor_borda, r, 4, border_radius=14)
-        return img
-
-    def criar_verso(self):
-        img = pygame.Surface(self.rect.size, pygame.SRCALPHA)
-        r = img.get_rect()
-        # degradê recortado com cantos arredondados (máscara)
-        img.blit(degrade(r.size, COR_VERSO_1, COR_VERSO_2), (0, 0))
-        mascara = pygame.Surface(r.size, pygame.SRCALPHA)
-        pygame.draw.rect(mascara, (255, 255, 255, 255), r, border_radius=14)
-        img.blit(mascara, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
-        # órbitas e planetinha no centro
-        orbita = r.inflate(-r.w * 0.3, -r.h * 0.55)
-        pygame.draw.ellipse(img, (170, 140, 240), orbita, 2)
-        pygame.draw.circle(img, AMARELO, r.center, r.w * 0.12)
-        pygame.draw.circle(img, (255, 255, 255), (orbita.right - 2, r.centery), r.w * 0.04)
-        pygame.draw.rect(img, COR_VERSO_BORDA, r, 3, border_radius=14)
-        return img
-
-    def atualizar(self, dt):
-        """Move o `progresso` em direção ao alvo (1 = mostrar frente, 0 = verso)."""
-        alvo = 1.0 if (self.virada or self.encontrada) else 0.0
-        passo = VELOCIDADE_GIRO * dt
-        if self.progresso < alvo:
-            self.progresso = min(alvo, self.progresso + passo)
-        elif self.progresso > alvo:
-            self.progresso = max(alvo, self.progresso - passo)
-
-    def desenhar(self, tela, dx=0, dy=0, destacar=False):
-        """dx/dy deslocam a carta (usado para tremer no erro e levantar no hover)."""
-        if self.progresso >= 0.5:
-            img = self.img_acerto if self.encontrada else self.img_frente
-        else:
-            img = self.img_verso
-
-        escala = abs(math.cos(self.progresso * math.pi))   # 1 -> 0 -> 1
-        largura = max(1, int(self.rect.width * escala))
-        img = pygame.transform.smoothscale(img, (largura, self.rect.height))
-        centro = (self.rect.centerx + dx, self.rect.centery + dy)
-
-        if destacar:   # sombra embaixo quando a carta "levanta"
-            sombra = pygame.Surface(self.rect.size, pygame.SRCALPHA)
-            pygame.draw.rect(sombra, (0, 0, 0, 90), sombra.get_rect(), border_radius=14)
-            tela.blit(sombra, sombra.get_rect(center=(self.rect.centerx + 4, self.rect.centery + 6)))
-
-        tela.blit(img, img.get_rect(center=centro))
-
-        if destacar:
-            pygame.draw.rect(tela, AMARELO, img.get_rect(center=centro), 3, border_radius=14)
-
-
-# =============================== TELA 2: JOGO ===============================
-class TelaJogo:
-    def __init__(self, tela, nivel, recordes, ceu):
-        self.tela = tela
-        self.nivel = nivel          # dicionário do nível escolhido no menu
-        self.recordes = recordes    # MESMO dicionário do menu (compartilhado)
-        self.ceu = ceu              # MESMO fundo animado do menu
-
-        self.fonte_grande = pygame.font.SysFont("arial", 54, bold=True)
-        self.fonte = pygame.font.SysFont("arial", 26, bold=True)
-        self.fonte_media = pygame.font.SysFont("arial", 22)
-        self.fonte_pequena = pygame.font.SysFont("arial", 18)
-
-        self.botao_voltar = Botao((20, 18, 110, 44), "< Menu", (70, 60, 140))
-        self.botao_de_novo = Botao((LARGURA // 2 - 215, 560, 205, 60), "Jogar de novo", (50, 160, 110))
-        self.botao_ir_menu = Botao((LARGURA // 2 + 10, 560, 205, 60), "Menu", (70, 60, 140))
-
-        self.reiniciar()
-
-    # ------------------------- PREPARAR PARTIDA -------------------------
-    def reiniciar(self):
-        colunas, linhas = self.nivel["colunas"], self.nivel["linhas"]
-        self.qtd_pares = colunas * linhas // 2
-
-        # sorteia QUAIS figuras entram e depois duplica e embaralha
-        ids = random.sample(range(len(FIGURAS)), self.qtd_pares) * 2
-        random.shuffle(ids)
-
-        # tamanho da carta para a grade caber na área disponível
-        larg_disp = LARGURA - 80
-        alt_disp = ALTURA - AREA_TOPO - AREA_BASE
-        tam = min((larg_disp - (colunas - 1) * ESPACO) // colunas,
-                  (alt_disp - (linhas - 1) * ESPACO) // linhas,
-                  140)
-
-        # centraliza a grade
-        larg_grade = colunas * tam + (colunas - 1) * ESPACO
-        alt_grade = linhas * tam + (linhas - 1) * ESPACO
-        x0 = (LARGURA - larg_grade) // 2
-        y0 = AREA_TOPO + (alt_disp - alt_grade) // 2
-
-        self.cartas = []
-        for i, id_figura in enumerate(ids):
-            col, lin = i % colunas, i // colunas   # índice -> posição na grade
-            carta = Carta(id_figura, x0 + col * (tam + ESPACO), y0 + lin * (tam + ESPACO), tam)
-            carta.virada = True                    # todas à mostra no começo
-            self.cartas.append(carta)
-
-        self.particulas = []
-        self.selecionadas = []
-        self.tentativas = 0
-        self.pares = 0
-        self.estado = "memorizar"   # memorizar -> jogando <-> verificando -> vitoria
-        self.inicio_estado = pygame.time.get_ticks()
-        self.inicio_cronometro = None
-        self.tempo_final = 0
-        self.novo_recorde = False
-
-    def tempo_de_jogo(self):
-        """Segundos desde que as cartas viraram (o cronômetro para na vitória)."""
-        if self.estado == "vitoria":
-            return self.tempo_final
-        if self.inicio_cronometro is None:
-            return 0
-        return (pygame.time.get_ticks() - self.inicio_cronometro) // 1000
-
-    # ------------------------- EVENTOS -------------------------
-    def tratar_evento(self, evento):
-        """Devolve "menu" quando o jogador quer voltar para a tela 1."""
-        if evento.type == pygame.KEYDOWN:
-            if evento.key == pygame.K_ESCAPE:
-                return "menu"
-            if evento.key == pygame.K_r:
-                self.reiniciar()
-        elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
-            return self.clicar(evento.pos)
-        return None
-
-    def clicar(self, pos):
-        if self.botao_voltar.clicado(pos):
-            return "menu"
-
-        if self.estado == "vitoria":
-            if self.botao_de_novo.clicado(pos):
-                self.reiniciar()
-            elif self.botao_ir_menu.clicado(pos):
-                return "menu"
-            return None
-
-        if self.estado != "jogando":   # durante memorização/verificação não pode clicar
-            return None
-
-        for carta in self.cartas:
-            if carta.rect.collidepoint(pos) and not carta.virada and not carta.encontrada:
-                carta.virada = True
-                self.selecionadas.append(carta)
-                break
-
-        if len(self.selecionadas) == 2:
-            self.tentativas += 1
-            a, b = self.selecionadas
-            if a.id == b.id:                       # ACERTOU: marca e solta partículas
-                a.encontrada = b.encontrada = True
-                self.pares += 1
-                self.explodir(a)
-                self.explodir(b)
-                self.selecionadas = []
-                if self.pares == self.qtd_pares:
-                    self.vencer()
-            else:                                  # ERROU: espera, treme e desvira
-                self.estado = "verificando"
-                self.inicio_estado = pygame.time.get_ticks()
-        return None
-
-    def explodir(self, carta):
-        """Cria partículas na cor da figura, saindo do centro da carta."""
-        _nome, cor = FIGURAS[carta.id]
-        for _ in range(28):
-            self.particulas.append(Particula(*carta.rect.center, cor))
-
-    def vencer(self):
-        self.tempo_final = self.tempo_de_jogo()
-        self.estado = "vitoria"
-        nome = self.nivel["nome"]
-        if self.recordes[nome] is None or self.tentativas < self.recordes[nome]:
-            self.recordes[nome] = self.tentativas   # o menu "vê" esse recorde
-            self.novo_recorde = True
-        # confete caindo do topo
-        for _ in range(160):
-            cor = random.choice(FIGURAS)[1]
-            p = Particula(random.uniform(0, LARGURA), random.uniform(-200, 0), cor,
-                          vx=random.uniform(-60, 60), vy=random.uniform(50, 200))
-            p.vida = p.vida_total = random.uniform(2.0, 3.5)
-            self.particulas.append(p)
-
-    def calcular_estrelas(self):
-        """3 estrelas = quase perfeito; 2 = bom; 1 = completou."""
-        if self.tentativas <= self.qtd_pares * 1.3:
-            return 3
-        if self.tentativas <= self.qtd_pares * 2:
-            return 2
-        return 1
-
-    # ------------------------- ATUALIZAÇÃO -------------------------
-    def atualizar(self, dt):
-        agora = pygame.time.get_ticks()
-        self.ceu.atualizar(dt)
-
-        if self.estado == "memorizar":
-            if agora - self.inicio_estado >= self.nivel["memorizar"]:
-                for carta in self.cartas:
-                    carta.virada = False
-                self.estado = "jogando"
-                self.inicio_cronometro = agora     # cronômetro começa aqui
-
-        elif self.estado == "verificando":
-            if agora - self.inicio_estado >= self.nivel["erro"]:
-                for carta in self.selecionadas:
-                    carta.virada = False
-                self.selecionadas = []
-                self.estado = "jogando"
-
-        for carta in self.cartas:
-            carta.atualizar(dt)
-
-        for p in self.particulas:
-            p.atualizar(dt)
-        self.particulas = [p for p in self.particulas if p.vida > 0]   # remove as que morreram
-
-    # ------------------------- DESENHO -------------------------
-    def desenhar(self):
-        mouse = pygame.mouse.get_pos()
-        agora = pygame.time.get_ticks()
-        tela = self.tela
-        self.ceu.desenhar(tela)
-
-        # Cabeçalho
-        self.botao_voltar.desenhar(tela, self.fonte_media, self.fonte_pequena, mouse)
-        texto(tela, f"{self.nivel['nome']}  •  {self.nivel['patente']}", self.fonte,
-              self.nivel["cor"], (LARGURA // 2 + 40, 40))
-
-        # Painel de informações (semitransparente)
-        painel = pygame.Surface((LARGURA - 40, 50), pygame.SRCALPHA)
-        pygame.draw.rect(painel, (30, 30, 80, 180), painel.get_rect(), border_radius=14)
-        tela.blit(painel, (20, 78))
-        minutos, segundos = divmod(self.tempo_de_jogo(), 60)
-        texto(tela, f"Tentativas: {self.tentativas}", self.fonte_media, BRANCO, (130, 103))
-        texto(tela, f"Pares: {self.pares}/{self.qtd_pares}", self.fonte_media, BRANCO, (LARGURA // 2, 103))
-        texto(tela, f"Tempo: {minutos:02d}:{segundos:02d}", self.fonte_media, BRANCO, (LARGURA - 130, 103))
-
-        # Mensagem de status
-        if self.estado == "memorizar":
-            restante = self.nivel["memorizar"] - (agora - self.inicio_estado)
-            seg = max(0, math.ceil(restante / 1000))
-            texto(tela, f"Memorize as cartas! Elas viram em {seg}s", self.fonte_media, AMARELO,
-                  (LARGURA // 2, 150))
-            fracao = max(0, restante) / self.nivel["memorizar"]          # barra diminuindo
-            pygame.draw.rect(tela, AMARELO, (40, 165, int((LARGURA - 80) * fracao), 4), border_radius=2)
-        elif self.estado == "verificando":
-            texto(tela, "Não é par!", self.fonte, COR_ERRO, (LARGURA // 2, 150))
-        elif self.estado == "jogando":
-            texto(tela, "Encontre os pares com o menor número de tentativas",
-                  self.fonte_pequena, CINZA, (LARGURA // 2, 150))
-
-        # Cartas
-        for carta in self.cartas:
-            dx = dy = 0
-            pode_clicar = (self.estado == "jogando" and not carta.virada
-                           and not carta.encontrada and carta.rect.collidepoint(mouse))
-            if pode_clicar:
-                dy = -5                                   # "levanta" a carta
-            if self.estado == "verificando" and carta in self.selecionadas:
-                decorrido = agora - self.inicio_estado
-                if 200 < decorrido < 550:                 # treme depois de terminar de virar
-                    dx = math.sin(decorrido * 0.07) * 7
-            carta.desenhar(tela, dx, dy, destacar=pode_clicar)
-
-        for p in self.particulas:
-            p.desenhar(tela)
-
-        texto(tela, "R = reiniciar   |   ESC = menu", self.fonte_pequena, CINZA, (LARGURA // 2, ALTURA - 25))
-
-        if self.estado == "vitoria":
-            self.desenhar_vitoria(mouse)
-
-    def desenhar_vitoria(self, mouse):
-        tela = self.tela
-        overlay = pygame.Surface((LARGURA, ALTURA), pygame.SRCALPHA)
-        overlay.fill((5, 0, 20, 170))
-        tela.blit(overlay, (0, 0))
-
-        painel = pygame.Rect(LARGURA // 2 - 255, 190, 510, 460)
-        pygame.draw.rect(tela, COR_PAINEL, painel, border_radius=24)
-        pygame.draw.rect(tela, (150, 120, 255), painel, 3, border_radius=24)
-
-        texto(tela, "Missão cumprida!", self.fonte_grande, AMARELO, (LARGURA // 2, 250))
-
-        # estrelas (as conquistadas "pulsam" com seno)
-        qtd = self.calcular_estrelas()
-        pulso = 1 + 0.08 * math.sin(pygame.time.get_ticks() / 150)
-        for i in range(3):
-            cx = LARGURA // 2 + (i - 1) * 85
-            if i < qtd:
-                pygame.draw.polygon(tela, AMARELO, pontos_estrela(cx, 335, 34 * pulso, 15 * pulso))
-            else:
-                pygame.draw.polygon(tela, (70, 70, 110), pontos_estrela(cx, 335, 34, 15))
-
-        minutos, segundos = divmod(self.tempo_final, 60)
-        texto(tela, f"{self.tentativas} tentativas  •  {minutos:02d}:{segundos:02d}",
-              self.fonte, BRANCO, (LARGURA // 2, 420))
-        if self.novo_recorde:
-            texto(tela, "Novo recorde!", self.fonte, COR_ACERTO, (LARGURA // 2, 475))
-        else:
-            rec = self.recordes[self.nivel["nome"]]
-            texto(tela, f"Recorde: {rec} tentativas", self.fonte_media, CINZA, (LARGURA // 2, 475))
-
-        self.botao_de_novo.desenhar(tela, self.fonte_media, self.fonte_pequena, mouse)
-        self.botao_ir_menu.desenhar(tela, self.fonte_media, self.fonte_pequena, mouse)
-
-        for p in self.particulas:       # confete por cima de tudo
-            p.desenhar(tela)
-
-
-# =============================== TELA 1: MENU ===============================
-class Menu:
-    def __init__(self, tela, recordes, ceu):
-        self.tela = tela
-        self.recordes = recordes
-        self.ceu = ceu
-
-        self.fonte_titulo = pygame.font.SysFont("arial", 56, bold=True)
-        self.fonte = pygame.font.SysFont("arial", 26, bold=True)
-        self.fonte_media = pygame.font.SysFont("arial", 22)
-        self.fonte_pequena = pygame.font.SysFont("arial", 18)
-
-        # Um botão para cada nível, um embaixo do outro
-        self.botoes = []
-        for i, nivel in enumerate(NIVEIS):
-            qtd = nivel["colunas"] * nivel["linhas"]
-            titulo = f"{nivel['nome']}  •  {nivel['patente']}"
-            sub = f"{qtd} cartas  •  {qtd // 2} pares  •  {nivel['memorizar'] // 1000}s para memorizar"
-            rect = (LARGURA // 2 - 260, 300 + i * 135, 520, 100)
-            self.botoes.append(Botao(rect, titulo, nivel["cor"], sub))
-
-    def tratar_evento(self, evento):
-        """Devolve o NÍVEL escolhido (dicionário), "sair", ou None."""
-        if evento.type == pygame.KEYDOWN and evento.key == pygame.K_ESCAPE:
-            return "sair"
-        if evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
-            for botao, nivel in zip(self.botoes, NIVEIS):
-                if botao.clicado(evento.pos):
-                    return nivel
-        return None
-
-    def atualizar(self, dt):
-        self.ceu.atualizar(dt)
-
-    def desenhar_orbita(self):
-        """Cartinhas girando numa órbita (elipse) no topo.
-        sin(ângulo) diz se a carta está "na frente" ou "atrás":
-        as da frente ficam maiores e são desenhadas por último."""
-        t = self.ceu.tempo
-        cx, cy = LARGURA // 2, 100
-        cartinhas = []
-        for i in range(8):
-            ang = t * 0.6 + i * 2 * math.pi / 8
-            profundidade = math.sin(ang)                 # -1 = atrás, 1 = na frente
-            x = cx + math.cos(ang) * 270
-            y = cy + profundidade * 38
-            tam = int(46 + 16 * profundidade)
-            cartinhas.append((profundidade, x, y, tam, FIGURAS[i][0]))
-
-        for _prof, x, y, tam, nome in sorted(cartinhas):   # de trás para frente
-            r = pygame.Rect(0, 0, tam, tam)
-            r.center = (x, y)
-            pygame.draw.rect(self.tela, COR_FRENTE, r, border_radius=8)
-            desenhar_figura(self.tela, nome, r)
-            pygame.draw.rect(self.tela, COR_FRENTE_BORDA, r, 2, border_radius=8)
-
-    def desenhar(self):
-        mouse = pygame.mouse.get_pos()
-        tela = self.tela
-        self.ceu.desenhar(tela)
-        self.desenhar_orbita()
-
-        # Título com "brilho": o mesmo texto em roxo deslocado, por trás
-        for dx, dy in [(-2, 0), (2, 0), (0, -2), (0, 2)]:
-            texto(tela, "Memória Espacial", self.fonte_titulo, (140, 80, 255), (LARGURA // 2 + dx, 205 + dy))
-        texto(tela, "Memória Espacial", self.fonte_titulo, BRANCO, (LARGURA // 2, 205))
-        texto(tela, "Escolha sua missão", self.fonte_media, CINZA, (LARGURA // 2, 255))
-
-        for botao, nivel in zip(self.botoes, NIVEIS):
-            botao.desenhar(tela, self.fonte, self.fonte_pequena, mouse)
-            rec = self.recordes[nivel["nome"]]
-            if rec is not None:
-                texto(tela, f"Recorde: {rec} tentativas", self.fonte_pequena, AMARELO,
-                      (LARGURA // 2, botao.rect.bottom + 15))
-
-        texto(tela, "ESC = sair", self.fonte_pequena, CINZA, (LARGURA // 2, ALTURA - 30))
-
-
-# =============================== PROGRAMA PRINCIPAL ===============================
-def sair():
-    pygame.quit()
-    sys.exit()
-
-
-def main():
-    pygame.init()
-    tela = pygame.display.set_mode((LARGURA, ALTURA))
-    pygame.display.set_caption("Memória Espacial")
-    clock = pygame.time.Clock()
-
-    # Compartilhados entre as duas telas
-    recordes = {nivel["nome"]: None for nivel in NIVEIS}   # menor nº de tentativas por nível
-    ceu = CeuEstrelado()                                    # fundo animado
-
-    menu = Menu(tela, recordes, ceu)
-    tela_ativa = menu            # começa no menu
+        self.image = self.img_verso
+
+
+class Particula(pygame.sprite.Sprite):
+    """Quadradinho colorido que pula, cai e some (aparece quando acerta um par)."""
+
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.Surface((7, 7))
+        self.image.fill(random.choice(CORES_PARTICULAS))
+        self.rect = self.image.get_rect()
+        self.rect.centerx = x
+        self.rect.centery = y
+        self.velocidade_x = random.randint(-6, 6)
+        self.velocidade_y = random.randint(-12, -3)     # negativo = sobe
+        self.vida = 45                                   # quantos quadros ela dura
+
+    def update(self):
+        self.velocidade_y = self.velocidade_y + 0.5     # gravidade puxa para baixo
+        self.rect.x = self.rect.x + self.velocidade_x
+        self.rect.y = self.rect.y + self.velocidade_y
+        self.vida = self.vida - 1
+        if self.vida <= 0:
+            self.kill()                                  # remove a partícula do grupo
+
+
+# ------------------------- TELA 1: MENU -------------------------
+def tela_menu(janela, assets, ranking, nome):
+    """Devolve 3 coisas: a próxima tela, o nível escolhido e o nome digitado."""
+    relogio = pygame.time.Clock()
+
+    # Um retângulo (botão) para cada nível
+    botoes = {}
+    y = 310
+    for nivel in NIVEIS:
+        botoes[nivel] = pygame.Rect(LARGURA // 2 - 250, y, 500, 85)
+        y = y + 115
+    botao_ranking = pygame.Rect(LARGURA // 2 - 130, 670, 260, 60)
+    caixa_nome = pygame.Rect(LARGURA // 2 - 170, 220, 340, 50)
+
+    mostrar_ranking = False
 
     while True:
-        dt = clock.tick(FPS) / 1000   # segundos desde o último quadro
+        relogio.tick(FPS)
 
-        # 1) EVENTOS: cada tela trata os seus e diz se quer trocar de tela
+        # ----- EVENTOS -----
         for evento in pygame.event.get():
             if evento.type == pygame.QUIT:
-                sair()
+                return "sair", None, nome
 
-            resultado = tela_ativa.tratar_evento(evento)
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_ESCAPE:
+                    return "sair", None, nome
+                elif evento.key == pygame.K_BACKSPACE:
+                    nome = nome[:-1]                     # apaga a última letra
+                elif evento.unicode.isalnum() and len(nome) < TAM_NOME:
+                    nome = nome + evento.unicode         # só letras e números
 
-            if tela_ativa is menu:
-                if resultado == "sair":
-                    sair()
-                elif resultado is not None:              # escolheu um nível
-                    tela_ativa = TelaJogo(tela, resultado, recordes, ceu)
-            else:
-                if resultado == "menu":                  # jogo pediu para voltar
-                    tela_ativa = menu
+            if evento.type == pygame.MOUSEBUTTONDOWN:
+                if mostrar_ranking:                      # clique fecha o ranking
+                    mostrar_ranking = False
+                elif botao_ranking.collidepoint(evento.pos):
+                    assets["som_clique"].play()
+                    mostrar_ranking = True
+                else:
+                    for nivel in botoes:
+                        if botoes[nivel].collidepoint(evento.pos):
+                            assets["som_clique"].play()
+                            return "jogo", nivel, nome
 
-        # 2) LÓGICA  e  3) DESENHO da tela ativa
-        tela_ativa.atualizar(dt)
-        tela_ativa.desenhar()
-        pygame.display.flip()
+        # ----- DESENHO -----
+        janela.blit(assets["fundo"], (0, 0))
+
+        # 6 figuras enfileiradas no topo, só de enfeite
+        x = 105
+        for figura in FIGURAS[:6]:
+            imagem = pygame.transform.scale(assets[figura], (70, 70))
+            janela.blit(imagem, (x, 30))
+            x = x + 85
+
+        escrever(janela, "Memória Espacial", assets["fonte_titulo"], BRANCO, LARGURA // 2, 155)
+
+        # Caixa do nome
+        pygame.draw.rect(janela, AZUL_ESCURO, caixa_nome, border_radius=12)
+        pygame.draw.rect(janela, CINZA, caixa_nome, 2, border_radius=12)
+        if nome == "":
+            escrever(janela, "Digite seu nome...", assets["fonte_pequena"], CINZA,
+                     caixa_nome.centerx, caixa_nome.centery)
+        else:
+            escrever(janela, nome, assets["fonte"], BRANCO, caixa_nome.centerx, caixa_nome.centery)
+
+        # Botões dos níveis
+        for nivel in botoes:
+            config = NIVEIS[nivel]
+            qtd_cartas = config["colunas"] * config["linhas"]
+            texto = nivel + "  -  " + str(qtd_cartas) + " cartas"
+            desenhar_botao(janela, assets["fonte"], botoes[nivel], texto, config["cor"])
+
+        desenhar_botao(janela, assets["fonte"], botao_ranking, "Ranking", (90, 70, 170))
+        escrever(janela, "ESC = sair", assets["fonte_pequena"], CINZA, LARGURA // 2, ALTURA - 30)
+
+        if mostrar_ranking:
+            desenhar_ranking(janela, assets, ranking)
+
+        pygame.display.update()
 
 
-if __name__ == "__main__":
-    main()
+def desenhar_ranking(janela, assets, ranking):
+    """Janela por cima do menu com o top 5 de cada nível (3 colunas)."""
+    painel = pygame.Rect(30, 120, LARGURA - 60, 560)
+    pygame.draw.rect(janela, AZUL_ESCURO, painel, border_radius=20)
+    pygame.draw.rect(janela, AMARELO, painel, 3, border_radius=20)
+    escrever(janela, "Ranking - Top 5", assets["fonte_grande"], AMARELO, LARGURA // 2, 175)
+
+    x = 145                                         # centro da 1ª coluna
+    for nivel in ranking:
+        escrever(janela, nivel, assets["fonte"], NIVEIS[nivel]["cor"], x, 250)
+
+        if len(ranking[nivel]) == 0:
+            escrever(janela, "ninguém ainda", assets["fonte_pequena"], CINZA, x, 300)
+
+        y = 300
+        colocacao = 1
+        for jogador in ranking[nivel]:
+            escrever(janela, str(colocacao) + ". " + jogador["nome"], assets["fonte_pequena"], BRANCO, x, y)
+            escrever(janela, str(jogador["tentativas"]) + " tentativas", assets["fonte_pequena"], CINZA, x, y + 24)
+            y = y + 65
+            colocacao = colocacao + 1
+
+        x = x + 215                                 # vai para a próxima coluna
+
+    escrever(janela, "Clique para fechar", assets["fonte_pequena"], CINZA, LARGURA // 2, 650)
+
+
+# ------------------------- TELA 2: JOGO -------------------------
+def tela_jogo(janela, assets, nivel, nome, ranking):
+    """Devolve a próxima tela: "menu", "jogo" (jogar de novo) ou "sair"."""
+    relogio = pygame.time.Clock()
+    config = NIVEIS[nivel]
+    colunas = config["colunas"]
+    linhas = config["linhas"]
+    tamanho = config["tamanho"]
+    qtd_pares = colunas * linhas // 2
+
+    # 1) Sorteia as figuras da partida e duplica (cada uma vira um par)
+    figuras = FIGURAS[:]                    # cópia da lista
+    random.shuffle(figuras)
+    figuras = figuras[:qtd_pares]
+    baralho = figuras + figuras
+    random.shuffle(baralho)
+
+    # 2) Cria as cartas na grade, centralizada na tela
+    largura_grade = colunas * tamanho + (colunas - 1) * ESPACO
+    x_inicial = (LARGURA - largura_grade) // 2
+    y_inicial = 190
+    img_verso = pygame.transform.scale(assets["verso"], (tamanho, tamanho))
+
+    cartas = pygame.sprite.Group()          # grupo com todas as cartas
+    particulas = pygame.sprite.Group()      # grupo com as partículas
+
+    for i in range(len(baralho)):
+        coluna = i % colunas                # resto da divisão -> coluna
+        linha = i // colunas                # divisão inteira  -> linha
+        x = x_inicial + coluna * (tamanho + ESPACO)
+        y = y_inicial + linha * (tamanho + ESPACO)
+        img_frente = pygame.transform.scale(assets[baralho[i]], (tamanho, tamanho))
+        cartas.add(Carta(baralho[i], img_frente, img_verso, x, y))
+
+    # 3) Variáveis da partida
+    estado = "memorizar"      # "memorizar" -> "jogando" <-> "errou" -> "vitoria"
+    inicio = pygame.time.get_ticks()        # quando a partida começou
+    inicio_jogo = 0                         # quando as cartas viraram (começa o cronômetro)
+    momento_erro = 0
+    tempo_final = 0
+    selecionadas = []
+    tentativas = 0
+    pares = 0
+    posicao = 0
+
+    while True:
+        relogio.tick(FPS)
+        agora = pygame.time.get_ticks()
+
+        # ----- EVENTOS -----
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                return "sair"
+
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_ESCAPE:
+                    return "menu"
+                if evento.key == pygame.K_r:
+                    return "jogo"                   # recomeça o mesmo nível
+
+            if evento.type == pygame.MOUSEBUTTONDOWN:
+                if estado == "vitoria":
+                    return "menu"                   # clique na vitória volta ao menu
+
+                if estado == "jogando":
+                    for carta in cartas:
+                        if carta.rect.collidepoint(evento.pos) and not carta.virada:
+                            carta.virar_para_cima()
+                            assets["som_virar"].play()
+                            selecionadas.append(carta)
+                            break
+
+                    if len(selecionadas) == 2:
+                        tentativas = tentativas + 1
+                        carta1 = selecionadas[0]
+                        carta2 = selecionadas[1]
+
+                        if carta1.figura == carta2.figura:        # ACERTOU
+                            carta1.encontrada = True
+                            carta2.encontrada = True
+                            pares = pares + 1
+                            assets["som_acerto"].play()
+                            for k in range(20):                   # explosão de partículas
+                                particulas.add(Particula(carta1.rect.centerx, carta1.rect.centery))
+                                particulas.add(Particula(carta2.rect.centerx, carta2.rect.centery))
+                            selecionadas = []
+
+                            if pares == qtd_pares:                # achou todos: VITÓRIA
+                                estado = "vitoria"
+                                tempo_final = (agora - inicio_jogo) // 1000
+                                posicao = adicionar_no_ranking(ranking, nivel, nome, tentativas)
+                                assets["som_vitoria"].play()
+                        else:                                     # ERROU
+                            estado = "errou"
+                            momento_erro = agora
+                            assets["som_erro"].play()
+
+        # ----- LÓGICA QUE DEPENDE DO TEMPO -----
+        if estado == "memorizar" and agora - inicio >= config["memorizar"]:
+            for carta in cartas:
+                carta.virar_para_baixo()
+            estado = "jogando"
+            inicio_jogo = agora
+
+        if estado == "errou" and agora - momento_erro >= TEMPO_ERRO:
+            for carta in selecionadas:
+                carta.virar_para_baixo()
+            selecionadas = []
+            estado = "jogando"
+
+        particulas.update()            # chama o update() de cada partícula
+
+        # ----- DESENHO -----
+        janela.blit(assets["fundo"], (0, 0))
+
+        escrever(janela, "Nível " + nivel + "  -  " + nome, assets["fonte"], config["cor"], LARGURA // 2, 40)
+
+        # Cronômetro
+        if estado == "memorizar":
+            segundos = 0
+        elif estado == "vitoria":
+            segundos = tempo_final
+        else:
+            segundos = (agora - inicio_jogo) // 1000
+
+        pygame.draw.rect(janela, AZUL_ESCURO, (20, 75, LARGURA - 40, 50), border_radius=12)
+        escrever(janela, "Tentativas: " + str(tentativas), assets["fonte_pequena"], BRANCO, 130, 100)
+        escrever(janela, "Pares: " + str(pares) + "/" + str(qtd_pares), assets["fonte_pequena"], BRANCO, LARGURA // 2, 100)
+        escrever(janela, "Tempo: " + str(segundos) + "s", assets["fonte_pequena"], BRANCO, LARGURA - 130, 100)
+
+        # Mensagem do momento
+        if estado == "memorizar":
+            falta = (config["memorizar"] - (agora - inicio)) // 1000 + 1
+            escrever(janela, "Memorize! As cartas viram em " + str(falta) + "s", assets["fonte"], AMARELO, LARGURA // 2, 155)
+        elif estado == "errou":
+            escrever(janela, "Não é par!", assets["fonte"], VERMELHO, LARGURA // 2, 155)
+        elif estado == "jogando":
+            escrever(janela, "Encontre os pares!", assets["fonte_pequena"], CINZA, LARGURA // 2, 155)
+
+        cartas.draw(janela)            # desenha todas as cartas do grupo
+
+        # Borda verde nas cartas encontradas e amarela na carta sob o mouse
+        for carta in cartas:
+            if carta.encontrada:
+                pygame.draw.rect(janela, VERDE, carta.rect, 4, border_radius=14)
+            elif estado == "jogando" and not carta.virada and carta.rect.collidepoint(pygame.mouse.get_pos()):
+                pygame.draw.rect(janela, AMARELO, carta.rect, 4, border_radius=14)
+
+        particulas.draw(janela)        # desenha todas as partículas do grupo
+
+        escrever(janela, "R = reiniciar   |   ESC = menu", assets["fonte_pequena"], CINZA, LARGURA // 2, ALTURA - 25)
+
+        if estado == "vitoria":
+            desenhar_vitoria(janela, assets, tentativas, tempo_final, posicao)
+
+        pygame.display.update()
+
+
+def desenhar_vitoria(janela, assets, tentativas, tempo, posicao):
+    """Escurece a tela e mostra o resultado da partida."""
+    escuro = pygame.Surface((LARGURA, ALTURA))
+    escuro.set_alpha(170)                           # 0 = invisível, 255 = opaco
+    escuro.fill((0, 0, 0))
+    janela.blit(escuro, (0, 0))
+
+    painel = pygame.Rect(LARGURA // 2 - 250, 230, 500, 360)
+    pygame.draw.rect(janela, AZUL_ESCURO, painel, border_radius=20)
+    pygame.draw.rect(janela, AMARELO, painel, 3, border_radius=20)
+
+    escrever(janela, "Missão cumprida!", assets["fonte_grande"], AMARELO, LARGURA // 2, 290)
+    escrever(janela, str(tentativas) + " tentativas em " + str(tempo) + " segundos",
+             assets["fonte"], BRANCO, LARGURA // 2, 370)
+
+    if posicao == 1:
+        escrever(janela, "NOVO RECORDE! 1º lugar", assets["fonte"], VERDE, LARGURA // 2, 430)
+    elif posicao > 1:
+        escrever(janela, "Você ficou em " + str(posicao) + "º no ranking!", assets["fonte"], VERDE, LARGURA // 2, 430)
+    else:
+        escrever(janela, "Não entrou no top 5. Tente de novo!", assets["fonte"], CINZA, LARGURA // 2, 430)
+
+    escrever(janela, "R = jogar de novo   |   clique = menu", assets["fonte_pequena"], CINZA, LARGURA // 2, 530)
+
+
+# ------------------------- PROGRAMA PRINCIPAL -------------------------
+pygame.init()
+pygame.mixer.init()
+janela = pygame.display.set_mode((LARGURA, ALTURA))
+pygame.display.set_caption("Memória Espacial")
+
+assets = carregar_assets()
+ranking = carregar_ranking()
+
+# Música de fundo tocando sem parar (-1 = repetir para sempre)
+pygame.mixer.music.load(os.path.join(PASTA_SND, "musica.wav"))
+pygame.mixer.music.set_volume(0.4)
+pygame.mixer.music.play(-1)
+
+tela = "menu"
+nivel = None
+nome = ""
+
+# Cada função de tela devolve qual é a próxima tela
+while tela != "sair":
+    if tela == "menu":
+        tela, nivel, nome = tela_menu(janela, assets, ranking, nome)
+    elif tela == "jogo":
+        if nome == "":
+            nome = "Anônimo"
+        tela = tela_jogo(janela, assets, nivel, nome, ranking)
+
+pygame.quit()
