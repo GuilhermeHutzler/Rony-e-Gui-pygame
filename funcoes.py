@@ -44,59 +44,90 @@ def desenhar_simbolo(tela, forma, cor, rect):
 
     if forma == "circulo":
         pygame.draw.circle(tela, cor, (cx, cy), r)
+
     elif forma == "quadrado":
-        pygame.draw.rect(tela, cor, (cx - r, cy - r, 2 * r, 2 * r), border_radius=6)
+        pygame.draw.rect(
+            tela, cor,
+            (cx - r, cy - r, 2 * r, 2 * r),
+            border_radius=6
+        )
+
     elif forma == "triangulo":
-        pygame.draw.polygon(tela, cor, [(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)])
+        pygame.draw.polygon(
+            tela, cor,
+            [(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)]
+        )
+
     elif forma == "losango":
-        pygame.draw.polygon(tela, cor, [(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)])
+        pygame.draw.polygon(
+            tela, cor,
+            [(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]
+        )
+
     elif forma == "estrela":
         pontos = []
         for i in range(10):
             ang = -math.pi / 2 + i * math.pi / 5
             raio = r + 4 if i % 2 == 0 else (r + 4) * 0.45
-            pontos.append((cx + raio * math.cos(ang), cy + raio * math.sin(ang)))
+            pontos.append(
+                (cx + raio * math.cos(ang), cy + raio * math.sin(ang))
+            )
         pygame.draw.polygon(tela, cor, pontos)
+
     elif forma == "cruz":
         espessura = r * 0.8
-        pygame.draw.rect(tela, cor, (cx - espessura / 2, cy - r, espessura, 2 * r))
-        pygame.draw.rect(tela, cor, (cx - r, cy - espessura / 2, 2 * r, espessura))
+        pygame.draw.rect(
+            tela, cor,
+            (cx - espessura / 2, cy - r, espessura, 2 * r)
+        )
+        pygame.draw.rect(
+            tela, cor,
+            (cx - r, cy - espessura / 2, 2 * r, espessura)
+        )
+
     elif forma == "hexagono":
         pontos = [
-            (cx + r * math.cos(math.pi / 3 * i), cy + r * math.sin(math.pi / 3 * i))
+            (
+                cx + r * math.cos(math.pi / 3 * i),
+                cy + r * math.sin(math.pi / 3 * i)
+            )
             for i in range(6)
         ]
         pygame.draw.polygon(tela, cor, pontos)
+
     elif forma == "anel":
         pygame.draw.circle(tela, cor, (cx, cy), r, 10)
 
 
 # ----------------------------- Carta -----------------------------
 class Carta:
-    def _init_(self, id_simbolo, x, y):
+    def __init__(self, id_simbolo, x, y):
         self.id = id_simbolo
         self.rect = pygame.Rect(x, y, TAM_CARTA, TAM_CARTA)
-        self.virada = False       # mostrando a frente?
-        self.encontrada = False   # par já descoberto?
+        self.virada = False
+        self.encontrada = False
 
     def desenhar(self, tela):
         if self.virada or self.encontrada:
             borda = COR_ACERTO if self.encontrada else CINZA
             pygame.draw.rect(tela, COR_FRENTE, self.rect, border_radius=14)
             pygame.draw.rect(tela, borda, self.rect, 4, border_radius=14)
+
             forma, cor = SIMBOLOS[self.id]
             desenhar_simbolo(tela, forma, cor, self.rect)
         else:
             pygame.draw.rect(tela, COR_VERSO, self.rect, border_radius=14)
             pygame.draw.rect(tela, COR_VERSO_BORDA, self.rect, 4, border_radius=14)
-            # pequeno desenho no verso
-            pygame.draw.circle(tela, COR_VERSO_BORDA, self.rect.center, 14, 3)
+            pygame.draw.circle(
+                tela, COR_VERSO_BORDA, self.rect.center, 14, 3
+            )
 
 
 # ----------------------------- Jogo -----------------------------
 class Jogo:
-    def _init_(self):
+    def __init__(self):
         pygame.init()
+
         self.tela = pygame.display.set_mode((LARGURA, ALTURA))
         pygame.display.set_caption("Jogo da Memória")
         self.clock = pygame.time.Clock()
@@ -106,7 +137,7 @@ class Jogo:
         self.fonte_pequena = pygame.font.SysFont("arial", 20)
         self.fonte_grande = pygame.font.SysFont("arial", 64, bold=True)
 
-        self.melhor = None  # menor número de tentativas na sessão
+        self.melhor = None
         self.novo_jogo()
 
     def novo_jogo(self):
@@ -117,26 +148,35 @@ class Jogo:
         x0 = (LARGURA - largura_grade) // 2
 
         self.cartas = []
+
         for i, id_simbolo in enumerate(ids):
-            col, lin = i % COLUNAS, i // COLUNAS
+            col = i % COLUNAS
+            lin = i // COLUNAS
+
             x = x0 + col * (TAM_CARTA + ESPACO)
             y = TOPO + lin * (TAM_CARTA + ESPACO)
+
             carta = Carta(id_simbolo, x, y)
-            carta.virada = True  # todas à mostra no início
+            carta.virada = True
             self.cartas.append(carta)
 
-        self.estado = "memorizar"   # memorizar -> jogando -> verificando -> vitoria
+        self.estado = "memorizar"
         self.inicio_estado = pygame.time.get_ticks()
         self.selecionadas = []
         self.tentativas = 0
         self.pares = 0
 
-    # ---------- Lógica ----------
+    # ----------------------------- Lógica -----------------------------
     def clicar(self, pos):
         if self.estado != "jogando":
             return
+
         for carta in self.cartas:
-            if carta.rect.collidepoint(pos) and not carta.virada and not carta.encontrada:
+            if (
+                carta.rect.collidepoint(pos)
+                and not carta.virada
+                and not carta.encontrada
+            ):
                 carta.virada = True
                 self.selecionadas.append(carta)
                 break
@@ -144,12 +184,16 @@ class Jogo:
         if len(self.selecionadas) == 2:
             self.tentativas += 1
             a, b = self.selecionadas
+
             if a.id == b.id:
-                a.encontrada = b.encontrada = True
+                a.encontrada = True
+                b.encontrada = True
                 self.pares += 1
                 self.selecionadas = []
+
                 if self.pares == len(SIMBOLOS):
                     self.estado = "vitoria"
+
                     if self.melhor is None or self.tentativas < self.melhor:
                         self.melhor = self.tentativas
             else:
@@ -169,10 +213,11 @@ class Jogo:
             if agora - self.inicio_estado >= TEMPO_ERRO:
                 for carta in self.selecionadas:
                     carta.virada = False
+
                 self.selecionadas = []
                 self.estado = "jogando"
 
-    # ---------- Desenho ----------
+    # ----------------------------- Desenho -----------------------------
     def texto(self, msg, fonte, cor, centro):
         surf = fonte.render(msg, True, cor)
         self.tela.blit(surf, surf.get_rect(center=centro))
@@ -180,27 +225,65 @@ class Jogo:
     def desenhar(self):
         self.tela.fill(FUNDO)
 
-        self.texto("Jogo da Memória", self.fonte_titulo, BRANCO, (LARGURA // 2, 40))
-        self.texto(f"Tentativas: {self.tentativas}", self.fonte, BRANCO, (150, 95))
-        self.texto(f"Pares: {self.pares}/{len(SIMBOLOS)}", self.fonte, BRANCO, (LARGURA // 2 + 20, 95))
-        melhor = "-" if self.melhor is None else str(self.melhor)
-        self.texto(f"Melhor: {melhor}", self.fonte, CINZA, (LARGURA - 100, 95))
+        self.texto(
+            "Jogo da Memória",
+            self.fonte_titulo,
+            BRANCO,
+            (LARGURA // 2, 40)
+        )
+        self.texto(
+            f"Tentativas: {self.tentativas}",
+            self.fonte,
+            BRANCO,
+            (150, 95)
+        )
+        self.texto(
+            f"Pares: {self.pares}/{len(SIMBOLOS)}",
+            self.fonte,
+            BRANCO,
+            (LARGURA // 2 + 20, 95)
+        )
 
-        # Mensagem de status
+        melhor = "-" if self.melhor is None else str(self.melhor)
+        self.texto(
+            f"Melhor: {melhor}",
+            self.fonte,
+            CINZA,
+            (LARGURA - 100, 95)
+        )
+
         if self.estado == "memorizar":
-            restante = max(0, TEMPO_MEMORIZACAO - (pygame.time.get_ticks() - self.inicio_estado))
+            restante = max(
+                0,
+                TEMPO_MEMORIZACAO
+                - (pygame.time.get_ticks() - self.inicio_estado)
+            )
             segundos = math.ceil(restante / 1000)
-            self.texto(f"Memorize as cartas! Elas viram em {segundos}s", self.fonte, (255, 215, 90),
-                       (LARGURA // 2, 130))
+
+            self.texto(
+                f"Memorize as cartas! Elas viram em {segundos}s",
+                self.fonte,
+                (255, 215, 90),
+                (LARGURA // 2, 130)
+            )
+
         elif self.estado in ("jogando", "verificando"):
-            self.texto("Encontre os pares com o menor número de tentativas",
-                       self.fonte_pequena, CINZA, (LARGURA // 2, 130))
+            self.texto(
+                "Encontre os pares com o menor número de tentativas",
+                self.fonte_pequena,
+                CINZA,
+                (LARGURA // 2, 130)
+            )
 
         for carta in self.cartas:
             carta.desenhar(self.tela)
 
-        self.texto("R = reiniciar   |   ESC = sair", self.fonte_pequena, CINZA,
-                   (LARGURA // 2, ALTURA - 25))
+        self.texto(
+            "R = reiniciar   |   ESC = sair",
+            self.fonte_pequena,
+            CINZA,
+            (LARGURA // 2, ALTURA - 25)
+        )
 
         if self.estado == "vitoria":
             self.tela_vitoria()
@@ -213,6 +296,7 @@ class Jogo:
         self.tela.blit(overlay, (0, 0))
 
         minimo = len(SIMBOLOS)
+
         if self.tentativas <= minimo + 2:
             nota = "Memória incrível!"
         elif self.tentativas <= minimo * 2:
@@ -220,26 +304,51 @@ class Jogo:
         else:
             nota = "Continue treinando!"
 
-        self.texto("Parabéns!", self.fonte_grande, (255, 215, 90), (LARGURA // 2, 280))
-        self.texto(f"Você terminou em {self.tentativas} tentativas", self.fonte, BRANCO,
-                   (LARGURA // 2, 360))
-        self.texto(nota, self.fonte, COR_ACERTO, (LARGURA // 2, 410))
-        self.texto("Pressione R para jogar de novo", self.fonte, CINZA, (LARGURA // 2, 480))
+        self.texto(
+            "Parabéns!",
+            self.fonte_grande,
+            (255, 215, 90),
+            (LARGURA // 2, 280)
+        )
+        self.texto(
+            f"Você terminou em {self.tentativas} tentativas",
+            self.fonte,
+            BRANCO,
+            (LARGURA // 2, 360)
+        )
+        self.texto(
+            nota,
+            self.fonte,
+            COR_ACERTO,
+            (LARGURA // 2, 410)
+        )
+        self.texto(
+            "Pressione R para jogar de novo",
+            self.fonte,
+            CINZA,
+            (LARGURA // 2, 480)
+        )
 
-    # ---------- Loop principal ----------
+    # ----------------------------- Loop principal -----------------------------
     def rodar(self):
         while True:
             for evento in pygame.event.get():
                 if evento.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
+
                 elif evento.type == pygame.KEYDOWN:
                     if evento.key == pygame.K_ESCAPE:
                         pygame.quit()
                         sys.exit()
+
                     elif evento.key == pygame.K_r:
                         self.novo_jogo()
-                elif evento.type == pygame.MOUSEBUTTONDOWN and evento.button == 1:
+
+                elif (
+                    evento.type == pygame.MOUSEBUTTONDOWN
+                    and evento.button == 1
+                ):
                     self.clicar(evento.pos)
 
             self.atualizar()
@@ -247,5 +356,5 @@ class Jogo:
             self.clock.tick(FPS)
 
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     Jogo().rodar()
