@@ -1,15 +1,4 @@
-# ============================================================
-#  JOGO DA MEMÓRIA - pygame
-#
-#  Para jogar: python memoria_espacial.py
-#  Não precisa de nenhum outro arquivo: os desenhos e os sons
-#  são criados aqui mesmo no código.
-#
-#  O jogo tem 2 telas, e cada tela é uma FUNÇÃO com o seu próprio loop:
-#    tela_menu()  -> digita o nome, escolhe o nível, vê o ranking
-#    tela_jogo()  -> a partida
-#  Cada função devolve qual é a próxima tela ("menu", "jogo" ou "sair").
-# ============================================================
+
 
 import os
 import random
@@ -87,6 +76,20 @@ def carregar_sons():
     sons["erro"] = criar_som([(220, 0.12), (160, 0.2)])
     sons["vitoria"] = criar_som([(523, 0.12), (659, 0.12), (784, 0.12), (1047, 0.4)])
     sons["clique"] = criar_som([(600, 0.05)])
+
+    # Música de fundo: uma melodia curta (cerca de 8 segundos) que vai repetir
+    # Notas usadas: Dó=262, Ré=294, Mi=330, Fá=349, Sol=392, Lá=440
+    melodia = [
+        (262, 0.25), (330, 0.25), (392, 0.25), (330, 0.25),
+        (294, 0.25), (349, 0.25), (440, 0.25), (349, 0.25),
+        (330, 0.25), (392, 0.25), (262, 0.25), (392, 0.25),
+        (294, 0.25), (392, 0.25), (349, 0.25), (294, 0.25),
+        (262, 0.25), (330, 0.25), (392, 0.25), (440, 0.25),
+        (392, 0.25), (349, 0.25), (330, 0.25), (294, 0.25),
+        (262, 0.5), (392, 0.5), (262, 1.0),
+    ]
+    sons["musica"] = criar_som(melodia)
+    sons["musica"].set_volume(0.25)       # mais baixa que os efeitos (0 a 1)
     return sons
 
 
@@ -553,6 +556,7 @@ fontes = {
     "pequena": pygame.font.SysFont("arial", 20),
 }
 sons = carregar_sons()
+sons["musica"].play(-1)         # -1 = repetir para sempre (música de fundo)
 ranking = carregar_ranking()
 
 tela = "menu"
