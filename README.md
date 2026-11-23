@@ -61,4 +61,3 @@ Link vídeo : https://youtube.com/shorts/wYuC7fM-NQk?is=sxxOzBdP19hTsH3D
 
 
 
-Esta conversa está sendo útil até agora?
