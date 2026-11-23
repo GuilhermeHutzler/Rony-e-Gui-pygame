@@ -572,4 +572,4 @@ while tela != "sair":
             nome = "Anônimo"
         tela = tela_jogo(janela, fontes, sons, nivel, nome, ranking)
 
-pygame.quit())
+pygame.quit()
